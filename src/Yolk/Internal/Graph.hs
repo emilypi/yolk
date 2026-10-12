@@ -2,7 +2,17 @@
 {-# LANGUAGE RoleAnnotations #-}
 {-# LANGUAGE TypeFamilies #-}
 
--- | Deferred congruence rebuilding, following Willsey et al.,
+-- |
+-- Module       : Yolk.Internal.Graph
+-- Description  : Typed e-graph storage and deferred congruence rebuilding.
+-- Copyright    : (c) 2026 Emily Pillmore
+-- License      : BSD-3-Clause
+--
+-- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
+-- Deferred congruence rebuilding, following Willsey et al.,
 -- "egg: Fast and Extensible Equality Saturation" (POPL 2021).
 -- https://doi.org/10.1145/3434304
 --

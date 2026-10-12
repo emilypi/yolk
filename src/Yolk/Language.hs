@@ -1,6 +1,16 @@
 {-# LANGUAGE QuantifiedConstraints #-}
 
--- | Many-sorted higher-kinded languages and finite terms.
+-- |
+-- Module       : Yolk.Language
+-- Description  : Many-sorted higher-kinded languages and finite terms.
+-- Copyright    : (c) 2026 Emily Pillmore
+-- License      : BSD-3-Clause
+--
+-- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
+-- Many-sorted higher-kinded languages and finite terms.
 -- Traversal uses the @hkd@ package's 'FTraversable' interface.
 module Yolk.Language
   ( Language (..), ClassId, Term, term, unTerm, foldTerm

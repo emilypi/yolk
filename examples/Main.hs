@@ -1,4 +1,14 @@
--- | Run with @cabal run yolk-example@. Both interpreters simplify the same
+-- |
+-- Module       : Main
+-- Description  : Examples of yolk rewriting, extraction, and optics.
+-- Copyright    : (c) 2026 Emily Pillmore
+-- License      : BSD-3-Clause
+--
+-- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
+-- Run with @cabal run yolk-example@. Both interpreters simplify the same
 -- many-sorted terms; all graph operations go through the public Yolk API.
 module Main (main) where
 

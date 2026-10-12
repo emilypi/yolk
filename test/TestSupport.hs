@@ -1,5 +1,15 @@
 {-# LANGUAGE RankNTypes #-}
 
+-- |
+-- Module       : TestSupport
+-- Description  : Shared assertions and execution across both yolk backends.
+-- Copyright    : (c) 2026 Emily Pillmore
+-- License      : BSD-3-Clause
+--
+-- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
 module TestSupport (Program (..), both, assertRight, observeProperty) where
 
 import Test.Tasty (TestTree, testGroup)

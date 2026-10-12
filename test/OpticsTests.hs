@@ -1,3 +1,13 @@
+-- |
+-- Module       : OpticsTests
+-- Description  : Lens laws and API tests for yolk optics.
+-- Copyright    : (c) 2026 Emily Pillmore
+-- License      : BSD-3-Clause
+--
+-- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
 module OpticsTests (opticsTests) where
 
 import Control.Lens (Lens', Prism', (&), (.~), (%~), (^.), (^?), _1, _Just, from, over, preview, prism', review, set, view)

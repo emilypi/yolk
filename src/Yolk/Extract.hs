@@ -1,6 +1,16 @@
 {-# LANGUAGE GADTs #-}
 
--- | Configurable minimum-cost tree extraction. The relaxation follows
+-- |
+-- Module       : Yolk.Extract
+-- Description  : Tree extraction with configurable minimization criteria.
+-- Copyright    : (c) 2026 Emily Pillmore
+-- License      : BSD-3-Clause
+--
+-- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
+-- Configurable minimum-cost tree extraction. The relaxation follows
 -- the fixed-point view of extraction in Willsey et al., POPL 2021
 -- (https://doi.org/10.1145/3434304), related to Knuth's generalization of
 -- Dijkstra's algorithm (https://doi.org/10.1016/0020-0190(77)90002-3).

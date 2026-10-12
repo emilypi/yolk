@@ -2,7 +2,17 @@
 {-# LANGUAGE RoleAnnotations #-}
 {-# LANGUAGE TypeFamilies #-}
 
--- | Typed identities and recursive terms. Constructors stay inside the library.
+-- |
+-- Module       : Yolk.Internal.Types
+-- Description  : Internal typed identities, terms, and rewrite representations.
+-- Copyright    : (c) 2026 Emily Pillmore
+-- License      : BSD-3-Clause
+--
+-- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
+-- Typed identities and recursive terms. Constructors stay inside the library.
 module Yolk.Internal.Types where
 
 import Data.Functor.Const (Const (..))

@@ -1,6 +1,16 @@
 {-# LANGUAGE DeriveAnyClass #-}
 
--- | Deterministic public-API workloads shared by benchmarks and regressions.
+-- |
+-- Module       : BenchVectors
+-- Description  : Shared yolk benchmark workloads and expected results.
+-- Copyright    : (c) 2026 Emily Pillmore
+-- License      : BSD-3-Clause
+--
+-- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
+-- Deterministic public-API workloads shared by benchmarks and regressions.
 -- Expected results come from closed forms, not from a second execution of
 -- the implementation being timed. All measured runs start with a fresh graph.
 module BenchVectors

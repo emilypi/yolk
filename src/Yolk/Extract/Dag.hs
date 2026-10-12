@@ -1,6 +1,16 @@
 {-# LANGUAGE RoleAnnotations #-}
 
--- | Solver-free optimal extraction of finite, shared DAGs. This is a separate
+-- |
+-- Module       : Yolk.Extract.Dag
+-- Description  : Solver-free optimal DAG extraction with additive costs.
+-- Copyright    : (c) 2026 Emily Pillmore
+-- License      : BSD-3-Clause
+--
+-- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
+-- Solver-free optimal extraction of finite, shared DAGs. This is a separate
 -- path from tree extraction: choose one visible member per demanded e-class,
 -- close over its children, reject cycles, and charge each chosen member once.
 -- Branch-and-bound is exact when it finishes, but can take exponential work.

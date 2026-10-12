@@ -1,6 +1,16 @@
 {-# LANGUAGE GADTs #-}
 
--- | Typed rewrite patterns and a bounded search/apply runner, following
+-- |
+-- Module       : Yolk.Rewrite
+-- Description  : Validated typed rewrites and bounded equality saturation.
+-- Copyright    : (c) 2026 Emily Pillmore
+-- License      : BSD-3-Clause
+--
+-- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
+-- Typed rewrite patterns and a bounded search/apply runner, following
 -- the equality-saturation iteration in Willsey et al. (POPL 2021):
 -- https://doi.org/10.1145/3434304
 --

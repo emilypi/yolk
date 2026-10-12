@@ -1,6 +1,16 @@
 {-# LANGUAGE BangPatterns #-}
 
--- | Solver-free branch-and-bound over a sort-erased immutable problem.
+-- |
+-- Module       : Yolk.Internal.Dag
+-- Description  : Branch-and-bound search for finite DAG extraction.
+-- Copyright    : (c) 2026 Emily Pillmore
+-- License      : BSD-3-Clause
+--
+-- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
+-- Solver-free branch-and-bound over a sort-erased immutable problem.
 -- Typed reconstruction lives in Yolk.Extract.Dag. No tree-cost relaxation
 -- participates in the optimality proof.
 module Yolk.Internal.Dag (Node (..), Solution (..), solve) where

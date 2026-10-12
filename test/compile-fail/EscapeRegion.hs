@@ -1,3 +1,13 @@
+-- |
+-- Module       : EscapeRegion
+-- Description  : Compile-fail regression for escaping a yolk graph region.
+-- Copyright    : (c) 2026 Emily Pillmore
+-- License      : BSD-3-Clause
+--
+-- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
 module EscapeRegion where
 
 import Data.Proxy (Proxy)

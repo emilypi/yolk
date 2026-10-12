@@ -1,3 +1,13 @@
+-- |
+-- Module       : Main
+-- Description  : Command-line comparison of yolk benchmark CSV exports.
+-- Copyright    : (c) 2026 Emily Pillmore
+-- License      : BSD-3-Clause
+--
+-- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
 module Main (main) where
 
 import BenchReport (compareCsv, renderReport)

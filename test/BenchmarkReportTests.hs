@@ -1,3 +1,13 @@
+-- |
+-- Module       : BenchmarkReportTests
+-- Description  : Regression tests for yolk benchmark CSV reports.
+-- Copyright    : (c) 2026 Emily Pillmore
+-- License      : BSD-3-Clause
+--
+-- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
 module BenchmarkReportTests (benchmarkReportTests) where
 
 import BenchReport

@@ -1,3 +1,13 @@
+-- |
+-- Module       : ExtractionTests
+-- Description  : Tests for configurable yolk tree minimization criteria.
+-- Copyright    : (c) 2026 Emily Pillmore
+-- License      : BSD-3-Clause
+--
+-- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
 module ExtractionTests (customExtractionTests) where
 
 import Control.Monad (foldM, void)

@@ -1,4 +1,14 @@
--- | A deliberately many-sorted language shared by the library tests.
+-- |
+-- Module       : TestLanguage
+-- Description  : A many-sorted arithmetic language for yolk tests.
+-- Copyright    : (c) 2026 Emily Pillmore
+-- License      : BSD-3-Clause
+--
+-- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
+-- A deliberately many-sorted language shared by the library tests.
 module TestLanguage
   ( Sort (..)
   , Math (..)

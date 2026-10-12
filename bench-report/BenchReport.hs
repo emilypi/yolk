@@ -1,4 +1,14 @@
--- | Descriptive raw mean comparisons of tasty-bench CSV exports. Workloads
+-- |
+-- Module       : BenchReport
+-- Description  : CSV comparison and descriptive statistics for yolk benchmarks.
+-- Copyright    : (c) 2026 Emily Pillmore
+-- License      : BSD-3-Clause
+--
+-- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
+-- Descriptive raw mean comparisons of tasty-bench CSV exports. Workloads
 -- receive equal weight; their absolute timings and timing deviations are not
 -- pooled. These ratios are distinct from tasty-bench's noise-aware timing gate.
 module BenchReport

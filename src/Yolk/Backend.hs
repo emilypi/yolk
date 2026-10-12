@@ -5,7 +5,17 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
 
--- | Union-find storage for the typed graph core.
+-- |
+-- Module       : Yolk.Backend
+-- Description  : Mutable and persistent union-find storage.
+-- Copyright    : (c) 2026 Emily Pillmore
+-- License      : BSD-3-Clause
+--
+-- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
+-- Union-find storage for the typed graph core.
 --
 -- IDs are allocated consecutively from zero. The caller must validate every
 -- raw ID before passing it to 'ufFind' or 'ufUnion': an ID must satisfy

@@ -1,4 +1,14 @@
--- | Optics compatible with @lens@. Import qualified to distinguish the record
+-- |
+-- Module       : Yolk.Optics
+-- Description  : Lens-compatible optics for yolk terms, rewrites, and extraction.
+-- Copyright    : (c) 2026 Emily Pillmore
+-- License      : BSD-3-Clause
+--
+-- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
+-- Optics compatible with @lens@. Import qualified to distinguish the record
 -- lenses from the existing accessors:
 --
 -- @

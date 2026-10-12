@@ -1,3 +1,13 @@
+-- |
+-- Module       : DagExtractionTests
+-- Description  : Optimality, sharing, and budget tests for yolk DAG extraction.
+-- Copyright    : (c) 2026 Emily Pillmore
+-- License      : BSD-3-Clause
+--
+-- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
 module DagExtractionTests (dagExtractionTests) where
 
 import Control.Monad (foldM, forM, forM_, void)

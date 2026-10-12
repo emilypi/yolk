@@ -1,3 +1,13 @@
+-- |
+-- Module       : BenchmarkTests
+-- Description  : Correctness regressions for yolk benchmark workloads.
+-- Copyright    : (c) 2026 Emily Pillmore
+-- License      : BSD-3-Clause
+--
+-- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
+-- Stability    : experimental
+-- Portability  : non-portable (GHC extensions)
+--
 module BenchmarkTests (benchmarkTests) where
 
 import Control.Monad (forM_)
