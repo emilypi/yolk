@@ -11,7 +11,7 @@ not yet met.
 | `Yolk.Backend` | Unboxed mutable and immutable persistent union-find, union by size, read-only find | Sedgewick and Wayne, weighted quick-union |
 | `Yolk.EGraph` | Region-scoped runners, add/lookup, union, rebuilding, snapshots and membership | Willsey et al., egg, POPL 2021 |
 | `Yolk.Rewrite` | Typed pattern registration, visible-member search, bounded search/apply iteration | Willsey et al., egg, POPL 2021 |
-| `Yolk.Extract` | Positive AST-size tree-cost relaxation, finite-tree extraction through cyclic graphs | egg extraction; Knuth, 1977 |
+| `Yolk.Extract` | Configurable ordered tree-cost relaxation, finite-tree extraction through cyclic graphs | egg extraction; Knuth, 1977 |
 
 ## Identity and sorts
 
@@ -75,12 +75,28 @@ atomically before the node-limit check. The reported graph is rebuilt even
 on a budget stop. The current scheduler is deterministic and unthrottled;
 backoff scheduling remains to be implemented.
 
-Tree extraction relaxes positive AST-size costs over visible members.
-Costs strictly improve until the least finite tree cost is reached. A
-cycle with no finite visible derivation yields `Nothing`; cycles with
-finite alternatives are supported. Internal costs use `Integer`, and an
-unrepresentable public `Int` result reports `CostOverflow`. This is not an
-optimal DAG extractor or a claim that saturation has finished.
+Tree extraction relaxes costs over visible members. `extractWith` accepts
+`TreeCost l c`, an algebra over an HKD node with `Const c` children. It
+keeps one least-cost finite witness per class, preserving operand order
+and multiplicity. The cost order must be total, reachable costs must have
+no infinite descending chain, and the algebra must be monotone and
+superior (a parent costs at least each child). Under these laws, repeated
+strict improvements terminate at the least finite tree cost. Only strict
+improvements replace a witness, including when zero-cost cycles exist.
+
+A cycle with no finite visible derivation yields `Nothing`; cycles with
+finite alternatives are supported. Every extraction computes fresh costs
+over an immutable snapshot, so querying with a different model cannot
+reuse costs from another objective. The existing whole-store relaxation
+is retained; a priority-queue implementation remains a performance task.
+
+The built-in size, depth and weighted-size algebras use `Word64`, with
+saturating addition to preserve ordering on overflow. They optimize in
+that saturated domain, so unrepresentable costs tie at `maxBound`.
+`extract` wraps `extractWith astSize`, converting to `Int` or reporting
+`CostOverflow`. Callers can choose an unbounded domain or a lexicographic
+tuple through `extractWith`. This is not an optimal DAG extractor or a
+claim that saturation has finished.
 
 ## Tests and acceptance
 
@@ -88,8 +104,11 @@ The source tests exercise both interpreters through the same public graph
 programs, including stale identities, typed interning, congruence chains,
 pruning/reinterning, snapshots, rewrite registration, budget stops, and
 cyclic extraction. Property tests compare generated equalities with an
-independent finite closure model. The example combines numeric and boolean
-rules and checks its results at runtime.
+independent finite closure model and configurable minimum costs with
+exhaustive enumeration of small finite grammars. Arithmetic boundary tests
+check Word64 saturation against unbounded arithmetic in the test oracle.
+The example combines numeric and boolean rules and checks several cost
+models at runtime with both backends.
 
 Build and test with GHC 9.14.1:
 

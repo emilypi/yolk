@@ -9,13 +9,10 @@ import Data.List (nub, sort)
 import Test.Tasty (TestTree, defaultMain, localOption, testGroup)
 import Test.Tasty.HUnit (Assertion, assertBool, assertEqual, assertFailure, testCase)
 import qualified Test.Tasty.QuickCheck as QC
+import ExtractionTests (customExtractionTests)
 import TestLanguage
+import TestSupport
 import Yolk
-
--- Each scenario is interpreted independently by both actual library backends.
--- No class identity escapes its runner or is compared across graph regions.
-newtype Program a = Program
-  (forall b r m. Backend b m => EGraphT b r Math m a)
 
 main :: IO ()
 main = defaultMain $ localOption (QC.QuickCheckTests 200) $ testGroup "yolk"
@@ -23,19 +20,9 @@ main = defaultMain $ localOption (QC.QuickCheckTests 200) $ testGroup "yolk"
   , pruningTests
   , ruleTests
   , extractionTests
+  , customExtractionTests
   , propertyTests
   ]
-
-both :: (Eq a, Show a) => String -> a -> Program a -> TestTree
-both label expected (Program action) = testGroup label
-  [ testCase "mutable" $ assertRight expected (runMutable action)
-  , testCase "persistent" $ assertRight expected (runPersistent action)
-  ]
-
-assertRight :: (Eq a, Show a) => a -> Either EGraphError a -> Assertion
-assertRight expected = \case
-  Left err -> assertFailure ("unexpected graph error: " ++ show err)
-  Right actual -> assertEqual "observable graph result" expected actual
 
 dirtyBoth :: String -> Program () -> TestTree
 dirtyBoth label (Program action) = testGroup label
@@ -480,8 +467,3 @@ propertyTests = testGroup "properties against independent observations"
       assertBool "transitive path" (reachable [(0, 1), (2, 1)] 0 2)
       assertBool "disconnected node" (not (reachable [(0, 1), (2, 1)] 0 3))
   ]
-
-observeProperty :: (Eq a, Show a) => String -> a -> Either EGraphError a -> QC.Property
-observeProperty backend expected = \case
-  Left err -> QC.counterexample (backend ++ ": " ++ show err) False
-  Right actual -> QC.counterexample backend (actual QC.=== expected)

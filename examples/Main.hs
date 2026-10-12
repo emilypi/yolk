@@ -2,8 +2,11 @@
 -- many-sorted terms; all graph operations go through the public Yolk API.
 module Main (main) where
 
+import Control.Monad (void)
+import Data.Functor.Const (Const (..))
 import Data.HKD (FFoldable (..), FFunctor (..), FTraversable (..), ffoldMapDefault, ffmapDefault)
 import Data.Kind (Type)
+import Data.Word (Word64)
 import System.Exit (die)
 import Yolk
 
@@ -101,6 +104,9 @@ main = case rules of
     putStrLn ("Boolean input: " ++ pretty condition)
     display "Mutable" (runMutable (simplify rewrites))
     display "Persistent" (runPersistent (simplify rewrites))
+    putStrLn "\nConfigurable tree minimization"
+    displayChoices "Mutable" (runMutable minimize)
+    displayChoices "Persistent" (runPersistent minimize)
 
 display :: String -> Either EGraphError Simplification -> IO ()
 display backend = \case
@@ -120,3 +126,73 @@ display backend = \case
       Nothing -> die (backend ++ ": no finite " ++ label ++ " term")
       Just (cost, rendered) ->
         putStrLn ("  " ++ label ++ " result: " ++ rendered ++ " (AST size " ++ show cost ++ ")")
+
+-- A payload-aware operator weight could inspect Lit's value as well. Word64
+-- weights are nonnegative; weightedSize adds them with saturating arithmetic.
+operationWeight :: Math s f -> Word64
+operationWeight Mul {} = 10
+operationWeight _ = 1
+
+-- The cost type can also be a tuple. Minimize multiplications first and AST
+-- size second, without assigning an arbitrary scalar penalty to multiplication.
+preferAddition :: TreeCost Math (Word64, Word64)
+preferAddition n =
+  let multiplications = weightedSize multiplication (ffmap (Const . fst . getConst) n)
+      size = astSize (ffmap (Const . snd . getConst) n)
+  -- When the primary objective saturates, absorb the secondary objective too.
+  -- Otherwise overflow could reverse the lexicographic ordering of children.
+  in if multiplications == maxBound then (maxBound, maxBound) else (multiplications, size)
+  where
+    multiplication :: Math s f -> Word64
+    multiplication Mul {} = 1
+    multiplication _ = 0
+
+data Choices = Choices
+  { smallest :: Maybe (Word64, String)
+  , cheapest :: Maybe (Word64, String)
+  , shallowest :: Maybe (Word64, String)
+  , lexicographic :: Maybe ((Word64, Word64), String)
+  } deriving (Eq, Show)
+
+minimize :: Backend b m => EGraphT b r Math m Choices
+minimize = do
+  let two = term (Lit 2)
+      one = term (Lit 1)
+  productId <- addTerm (term (Mul two (term (Lit 3))))
+  sumId <- addTerm (term (Add two (term (Add two two))))
+  -- Both expressions equal six. Extraction chooses among asserted equalities;
+  -- it does not discover this arithmetic identity on its own.
+  void (union productId sumId)
+  bySize <- extractWith astSize productId
+  byWeight <- extractWith (weightedSize operationWeight) productId
+  byPreference <- extractWith preferAddition productId
+
+  -- Equal expressions with opposing size/depth preferences: the conditional
+  -- has more AST nodes, but its longest path is shorter.
+  deep <- addTerm (term (Add one (term (Add one (term (Add one one))))))
+  shallow <- addTerm (term (If (term (Equal one one))
+    (term (Add two two)) (term (Add two two))))
+  void (union deep shallow)
+  byDepth <- extractWith astDepth deep
+  pure (Choices (render bySize) (render byWeight) (render byDepth) (render byPreference))
+  where
+    render :: Maybe (c, Term Math s) -> Maybe (c, String)
+    render = fmap (\(cost, tree) -> (cost, pretty tree))
+
+displayChoices :: String -> Either EGraphError Choices -> IO ()
+displayChoices backend = \case
+  Left err -> die (backend ++ " minimization failed: " ++ show err)
+  Right actual -> do
+    putStrLn ("\n" ++ backend ++ " backend")
+    putStrLn ("  AST size:             " ++ show (smallest actual))
+    putStrLn ("  Weighted operations:  " ++ show (cheapest actual))
+    putStrLn ("  AST depth:            " ++ show (shallowest actual))
+    putStrLn ("  (multiplications, size): " ++ show (lexicographic actual))
+    if actual == expected then pure ()
+      else die (backend ++ " did not produce the expected cost-model choices")
+  where
+    expected = Choices
+      (Just (3, "(2 * 3)"))
+      (Just (5, "(2 + (2 + 2))"))
+      (Just (3, "if (1 == 1) then (2 + 2) else (2 + 2)"))
+      (Just ((0, 5), "(2 + (2 + 2))"))

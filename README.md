@@ -8,7 +8,7 @@ language. E-class identities preserve those indices.
 The first implementation is in `src/`. It provides a mutable backend in
 `ST` or another `PrimMonad`, a persistent backend, canonical interning,
 deferred congruence rebuilding, typed rewrites, bounded equality saturation,
-immutable search snapshots, pruning, and minimum AST-size tree extraction.
+immutable search snapshots, pruning, and configurable tree minimization.
 The same graph program runs against either backend.
 
 ## Build and run
@@ -26,7 +26,10 @@ cabal run yolk-example
 
 The example simplifies a numeric conditional and its boolean condition
 using both backends. The expected results are `7` and `true`, each with
-AST size 1. It exits unsuccessfully if either backend disagrees.
+AST size 1. It then demonstrates size, depth, operator weights, and a
+lexicographic objective. Size chooses `(2 * 3)`; making multiplication
+expensive chooses `(2 + (2 + 2))`. It exits unsuccessfully if either backend
+disagrees with the expected results.
 
 ## Define a language
 
@@ -97,6 +100,63 @@ are distinct from `Saturated`. A match-cap failure applies none of the
 truncated iteration. Node limits are checked after each atomic rewrite,
 so one RHS can overshoot the limit. Extracting an incumbent after a budget
 stop does not mean the rewrite system has saturated.
+
+## Choose what to minimize
+
+`extract` retains its original `Maybe (Int, Term l s)` result and minimizes
+AST size. `extractWith` takes a cost algebra and returns its cost type:
+
+```haskell
+type TreeCost l c = forall s. l s (Const c) -> c
+
+extractWith :: (Backend b m, Language l, Ord c)
+            => TreeCost l c
+            -> ClassId r s
+            -> EGraphT b r l m (Maybe (c, Term l s))
+```
+
+Each child position contains a `Const c` with that child's best cost. The
+node still has its constructor, payload and result sort. The model can
+inspect all of these, combine child costs, and return any lawful ordered
+cost type; it does not need a `Num` instance.
+
+The built-in models use `Word64`:
+
+```haskell
+smallest <- extractWith astSize root
+shallowest <- extractWith astDepth root
+cheapest <- extractWith (weightedSize operationWeight) root
+
+-- For the example Math language:
+operationWeight :: Math s f -> Word64
+operationWeight Mul {} = 10
+operationWeight _ = 1
+```
+
+`astSize` charges one per constructor, including leaves. `astDepth` charges
+one plus the deepest child, with leaves at depth one. `weightedSize` sums
+a caller-supplied constructor/payload weight and all child occurrences.
+The example's `preferAddition` uses `(Word64, Word64)` to minimize the
+number of multiplications first, then AST size.
+When that primary component saturates, it absorbs the secondary component
+too, preserving lexicographic monotonicity at the numeric boundary.
+
+All three built-ins use saturating arithmetic: costs above `maxBound ::
+Word64` tie at that bound instead of wrapping into cheap values.
+`saturatingAdd` is public for custom models. Supply an unbounded cost
+algebra if distinguishing costs beyond that range matters. The legacy
+`extract` reports `CostOverflow` above `maxBound :: Int`.
+
+A custom algebra must be monotone in its children, return a cost at least
+as large as every child, use a lawful total order, and admit no infinite
+descending chain of reachable costs. These are caller obligations. Zero
+weights are supported: equal-cost alternatives keep the first finite
+witness, so zero-cost cycles cannot replace it indefinitely. Specify a
+secondary objective explicitly if ties matter.
+
+Each call minimizes over the current visible e-graph and returns `Nothing`
+when no finite visible tree exists. Repeated children count per occurrence;
+this is tree minimization. Optimal DAG extraction remains outstanding.
 
 ## Rebuilding, snapshots, and pruning
 
