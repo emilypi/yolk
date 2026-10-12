@@ -32,11 +32,13 @@ library
     Yolk.EGraph
     Yolk.Rewrite
     Yolk.Extract
+    Yolk.Extract.Dag
     Yolk.Optics
     Yolk.Backend
   other-modules:
     Yolk.Internal.Types
     Yolk.Internal.Graph
+    Yolk.Internal.Dag
   build-depends:
     containers >= 0.7 && < 0.9,
     hkd == 0.2.1,
@@ -49,7 +51,7 @@ test-suite yolk-tests
   type: exitcode-stdio-1.0
   hs-source-dirs: test
   main-is: Main.hs
-  other-modules: TestLanguage TestSupport ExtractionTests OpticsTests
+  other-modules: TestLanguage TestSupport ExtractionTests DagExtractionTests OpticsTests
   build-depends:
     yolk,
     hkd,

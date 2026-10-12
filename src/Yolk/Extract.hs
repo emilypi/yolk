@@ -5,7 +5,7 @@
 -- (https://doi.org/10.1145/3434304), related to Knuth's generalization of
 -- Dijkstra's algorithm (https://doi.org/10.1016/0020-0190(77)90002-3).
 -- Cycles without a finite visible derivation yield 'Nothing'. This does
--- not perform the separately planned optimal DAG extraction.
+-- not perform DAG extraction; see "Yolk.Extract.Dag" for that separate path.
 module Yolk.Extract
   ( TreeCost, extract, extractWith
   , astSize, astDepth, weightedSize, saturatingAdd

@@ -18,10 +18,14 @@ module Yolk.Optics
   , _UnboundVariable, _VariableSortMismatch
   , _DirtyGraph, _UnknownClass, _SortMismatch
   , _InvalidLimits, _InvalidBinding, _CostOverflow
+  , expansionLimit, dag, dagCost, lowerBound, optimality, expansions
+  , dagNode, dagNodeId, _Optimal, _Unproven, _InvalidExtraction
   ) where
 
-import Control.Lens (Iso', Lens', Prism', iso, lens, prism')
+import Control.Lens (Getter, Iso', Lens', Prism', iso, lens, prism', to)
+import Data.Word (Word64)
 import Type.Reflection (Typeable, typeRep)
+import qualified Yolk.Extract.Dag as D
 import Yolk.Internal.Types
 import qualified Yolk.Rewrite as R
 
@@ -125,4 +129,46 @@ _InvalidBinding = prism' InvalidBinding $ \case
 _CostOverflow :: Prism' EGraphError ()
 _CostOverflow = prism' (const CostOverflow) $ \case
   CostOverflow -> Just ()
+  _ -> Nothing
+
+-- | Change the deterministic DAG search budget; Nothing requests an
+-- unbounded search. Result and node optics below are read-only so the
+-- optimality certificate, sharing, and acyclicity cannot be invalidated.
+expansionLimit :: Lens' D.DagLimits (Maybe Word64)
+expansionLimit = lens D.expansionLimit (\s a -> s { D.expansionLimit = a })
+
+dag :: Getter (D.DagResult a) a
+dag = to D.dag
+
+dagCost :: Getter (D.DagResult a) Word64
+dagCost = to D.dagCost
+
+lowerBound :: Getter (D.DagResult a) Word64
+lowerBound = to D.lowerBound
+
+optimality :: Getter (D.DagResult a) D.Optimality
+optimality = to D.optimality
+
+expansions :: Getter (D.DagResult a) Word64
+expansions = to D.expansions
+
+dagNode :: Getter (D.Dag l s) (l s (D.Dag l))
+dagNode = to D.dagNode
+
+dagNodeId :: Getter (D.Dag l s) Int
+dagNodeId = to D.dagNodeId
+
+_Optimal :: Prism' D.Optimality ()
+_Optimal = prism' (const D.Optimal) $ \case
+  D.Optimal -> Just ()
+  _ -> Nothing
+
+_Unproven :: Prism' D.Optimality ()
+_Unproven = prism' (const D.Unproven) $ \case
+  D.Unproven -> Just ()
+  _ -> Nothing
+
+_InvalidExtraction :: Prism' EGraphError ()
+_InvalidExtraction = prism' (const InvalidExtraction) $ \case
+  InvalidExtraction -> Just ()
   _ -> Nothing

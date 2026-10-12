@@ -12,6 +12,7 @@ not yet met.
 | `Yolk.EGraph` | Region-scoped runners, add/lookup, union, rebuilding, snapshots and membership | Willsey et al., egg, POPL 2021 |
 | `Yolk.Rewrite` | Typed pattern registration, visible-member search, bounded search/apply iteration | Willsey et al., egg, POPL 2021 |
 | `Yolk.Extract` | Configurable ordered tree-cost relaxation, finite-tree extraction through cyclic graphs | egg extraction; Knuth, 1977 |
+| `Yolk.Extract.Dag` | Typed shared output, joint roots, additive Word64 objective and optimality certificates | Solver-free branch-and-bound in `Yolk.Internal.Dag` |
 | `Yolk.Optics` | Typed term/pattern optics, record lenses, error and stop-reason prisms | `lens` |
 
 ## Identity and sorts
@@ -97,13 +98,77 @@ that saturated domain, so unrepresentable costs tie at `maxBound`.
 `extract` wraps `extractWith astSize`, converting to `Int` or reporting
 `CostOverflow`. Callers can choose an unbounded domain or a lexicographic
 tuple through `extractWith`. This is not an optimal DAG extractor or a
-claim that saturation has finished.
+claim that saturation has finished. The separate `Yolk.Extract.Dag` path
+handles shared-node minimization.
+
+## Solver-free DAG extraction
+
+`extractDagOptimal` and `extractDagMany` work over a rebuilt snapshot.
+Visible members become an internal table of canonical owners, row IDs,
+distinct child classes, and nonnegative Word64 weights. The output retains
+the original typed node layers, including child order and multiplicity.
+Every demanded canonical e-class gets exactly one selected member; selected
+edges must form a finite DAG. Multiple roots share this selection and cost.
+
+The solver removes direct self-loops, computes productive classes to a
+fixpoint, removes members with nonproductive children, and restricts the
+problem to classes reachable from the requested roots. A discovery-order
+seed supplies a finite incumbent: every seed edge points to an earlier
+discovery, even with zero weights. If a root is nonproductive, extraction
+returns `Nothing`; a search budget never causes `Nothing`.
+
+Branch-and-bound maintains a selected map, distinct demanded-but-unchosen
+classes, and the cost already spent. It chooses the class with the fewest
+cycle-safe alternatives, breaking ties by descending minimum member cost
+then class ID. Selecting a member demands its children. An edge is rejected
+if it closes a path back to the class being assigned. Children of unchosen
+classes have no selected edges yet, so any new cycle must pass through
+the newly assigned class. Successors are explored by ascending lower bound.
+
+The lower bound is the cost already spent plus the sum of minimum member
+weights over distinct unchosen demands. Every completion must select one
+member for each of those classes. Ignoring all other dependencies and
+cycles can only underestimate its cost. The search prunes a branch when
+that bound reaches the incumbent cost. Every feasible selection follows
+one branch, so exhausting the remaining branches proves the incumbent
+optimal. At the expansion cap, the minimum bound over pending branches
+and the incumbent is still a valid global lower bound.
+
+All sums saturate at `maxBound :: Word64`. Nonnegative saturating addition
+is monotone, so the same proof holds in that domain, including zero costs
+and saturated ties. Arithmetic cannot wrap into a cheaper result. This API
+does not accept negative weights, arbitrary tree algebras, or use an external
+solver. Search can take exponential work; the default 100,000-expansion cap
+is a work policy, not calibrated throughput or a wall-clock bound.
+
+Typed reconstruction memoizes one `Dag l s` per selected class, with dense
+postorder IDs across all roots. Witness equality checks guard heterogeneous
+lookup; no unchecked casts are used. Nodes can escape the graph runner but
+cannot be forged or edited. `foldDagM` also memoizes by node ID and calls its
+algebra once per reachable node. IDs are meaningful only within one
+extraction result. A typed reconstruction inconsistency reports
+`InvalidExtraction`, distinct from the normal absence of a finite witness.
+
+`DagResult` is opaque: its feasible output, incumbent cost, lower bound,
+proof status, and expansion count have read-only accessors and `lens`
+getters. Only `DagLimits.expansionLimit` has a writable lens. `Optimal`
+means lower bound equals cost; `Unproven` retains the incumbent without
+claiming a proof. The entire result concerns the current visible e-graph,
+not equalities a future saturation run might discover.
+
+This is the B&B-first increment from the accepted extraction design. The
+treewidth-DP portfolio, stronger mandatory-set bounds, remaining reduction
+passes, and upstream extraction-gym validation and benchmarks remain work.
+No timings or coverage numbers from the earlier Python research are claims
+about this Haskell implementation.
+
+## Optics
 
 `Yolk.Optics` is imported separately because its record lens names match
 existing field accessors. An iso exposes a term's typed constructor layer;
 prisms distinguish pattern variables and nodes at the same sort. Only a
 validated rewrite's name is editable: changing either body still requires
-the `rewrite` validator. There are no optics exposing identity indices,
+the `rewrite` validator. There are no optics exposing graph identity indices,
 region witnesses, or snapshot internals.
 
 ## Tests and acceptance
@@ -117,7 +182,12 @@ exhaustive enumeration of small finite grammars. Arithmetic boundary tests
 check Word64 saturation against unbounded arithmetic in the test oracle.
 Optic laws and compositions are exercised using actual `lens` operators.
 The example combines numeric and boolean rules and checks several cost
-models at runtime with both backends.
+models at runtime with both backends. DAG tests compare exact results and
+budget certificates against independent exhaustive selections on small
+cyclic/shared graphs, and cover typed sharing, visibility, stale identities,
+multiple roots, and arithmetic saturation. Compile-negative DAG fixtures
+reject sort coercion and cross-sort optic access. The DAG example emits
+each shared operation once and checks its exact and budget-limited results.
 
 Build and test with GHC 9.14.1:
 
@@ -139,8 +209,9 @@ cabal run yolk-example
    occurrence queues and relational matching, retaining both backends.
 4. Integrate inspection tests, upstream suites, and hegg comparisons before
    making allocation, parity, or speed claims.
-5. Implement the remaining accepted v1 packages: solver-free optimal DAG
-   extraction, egglog-style rules, slotted e-graphs, and deriving support.
+5. Complete the DAG extraction portfolio (treewidth DP, reductions, corpus
+   benchmarks) and the remaining accepted v1 packages: egglog-style rules,
+   slotted e-graphs, and deriving support.
 
 These are outstanding requirements, not removed scope. The earlier
 allocation-criterion question remains unanswered; this implementation

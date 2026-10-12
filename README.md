@@ -8,8 +8,8 @@ language. E-class identities preserve those indices.
 The first implementation is in `src/`. It provides a mutable backend in
 `ST` or another `PrimMonad`, a persistent backend, canonical interning,
 deferred congruence rebuilding, typed rewrites, bounded equality saturation,
-immutable search snapshots, pruning, configurable tree minimization, and
-optics compatible with `lens`.
+immutable search snapshots, pruning, configurable tree minimization,
+solver-free optimal DAG extraction, and optics compatible with `lens`.
 The same graph program runs against either backend.
 
 ## Build and run
@@ -30,7 +30,9 @@ using both backends. The expected results are `7` and `true`, each with
 AST size 1. It then demonstrates size, depth, operator weights, and a
 lexicographic objective. Size chooses `(2 * 3)`; making multiplication
 expensive chooses `(2 + (2 + 2))`. It exits unsuccessfully if either backend
-disagrees with the expected results.
+disagrees with the expected results. Its DAG example then minimizes shared
+nodes, changes their weights, reports a budget-limited result, and emits
+each shared operation once.
 
 ## Define a language
 
@@ -157,7 +159,70 @@ secondary objective explicitly if ties matter.
 
 Each call minimizes over the current visible e-graph and returns `Nothing`
 when no finite visible tree exists. Repeated children count per occurrence;
-this is tree minimization. Optimal DAG extraction remains outstanding.
+this is tree minimization.
+
+## Minimize a shared DAG
+
+`Yolk.Extract.Dag` supplies a separate solver-free branch-and-bound path,
+also reexported by `Yolk`. It selects one visible member per reachable
+e-class, preserves sharing, and rejects cyclic selections. Its objective
+is a sum of nonnegative `Word64` constructor/payload weights, charged once
+per distinct selected node. `dagSizeCost` assigns one to every node.
+
+```haskell
+-- Prove the optimum, with no expansion cap:
+best <- extractDagOptimal (DagLimits Nothing) dagSizeCost root
+
+-- Bound the search and change the objective:
+weighted <- extractDagOptimal defaultDagLimits operationWeight root
+
+case best of
+  Nothing -> ... -- no finite visible derivation
+  Just result -> ... -- dag, dagCost, lowerBound, optimality, expansions
+```
+
+The example asserts the equality of `(1 + (2 + 1))` and
+`((1 + 1) * (1 + 1))`. Tree minimization chooses the first, with five AST
+nodes. DAG minimization chooses the second, with three distinct nodes:
+
+```text
+n0 = 1
+n1 = n0 + n0
+n2 = n1 * n1
+result = n2
+```
+
+Giving multiplication weight 10 changes the DAG choice back to the first
+expression, at cost 4. Minimizing a tree then deduplicating it would miss
+the minimum DAG in the size example.
+
+`DagLimits (Just n)` caps branch expansions; `defaultDagLimits` uses
+100,000. A zero budget still constructs a feasible incumbent if one exists.
+Every result satisfies `lowerBound <= optimum <= dagCost`; `Optimal`
+means the bounds coincide. When work remains at the cap the status is
+`Unproven`, not a claim of optimality. Costs and bounds saturate at
+`maxBound :: Word64`, so larger mathematical sums deliberately tie.
+The cap is not a time or memory limit: preprocessing, constructing the
+successors of a state, and typed reconstruction also take work. Exact
+search can take exponential time.
+
+Use `extractDagMany limits weight roots` to optimize an HKD collection of
+roots jointly, including different sorts. Sharing across those roots is
+charged once; duplicate roots retain their positions. Empty roots give
+an optimal cost-zero result.
+
+`Dag l s` is immutable and may leave the graph runner. `dagNode` exposes a
+typed layer with `Dag` children. `dagNodeId` is a dense postorder ID local
+to one extraction, shared across its roots; IDs from separate calls are
+unrelated. `dagSize` counts unique nodes. `foldDagM` runs an algebra once
+per reachable node, children first, which supports shared code emission.
+Separate folds have separate memo tables. `foldDag` is the pure version;
+`dagToTerm` returns the tree representation, whose consumers may count or
+evaluate shared subterms repeatedly.
+
+This path currently supports additive node weights. Depth and general
+lexicographic algebras remain available through the tree API; they are not
+silently reinterpreted as DAG objectives.
 
 ## Optics
 
@@ -184,6 +249,12 @@ pattern prisms, and prisms for every stop reason, rule error, and graph
 error. Compose `_Term` with prisms for your own language constructors.
 Term and pattern optics preserve sorts. Graph identities and snapshots
 stay opaque; changed rewrite bodies must pass through `rewrite` again.
+For DAG extraction, `O.expansionLimit` is a lens and `O._Optimal` /
+`O._Unproven` are prisms. `O.dag`, `O.dagCost`, `O.lowerBound`,
+`O.optimality`, `O.expansions`, `O.dagNode` and `O.dagNodeId` are getters:
+results and nodes cannot be edited in ways that invalidate their cost
+certificates or sharing. For example, `result ^? O.optimality . O._Optimal`
+checks the proof status, and `result ^. O.dag . O.dagNode` reads the root.
 
 ## Rebuilding, snapshots, and pruning
 
@@ -214,8 +285,9 @@ is no claim of allocation-free hot paths or a speedup over hegg.
 
 The remaining v1 work includes per-operator unboxed node storage,
 specialization/inspection gates, a relational matcher and backoff scheduler,
-the generic analysis API, independently checked explanations, optimal DAG
-extraction, egglog-style rules, slotted e-graphs, deriving support, and the
+the generic analysis API, independently checked explanations, the DAG
+treewidth-DP portfolio and corpus benchmarks, egglog-style rules, slotted
+e-graphs, deriving support, and the
 full upstream test/benchmark corpus. The existing acceptance criteria are
 unchanged. [Design and next steps](docs/design.md) separates these from the
 working source.

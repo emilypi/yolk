@@ -7,6 +7,7 @@ import Control.Monad (void)
 import Data.Functor.Const (Const (..))
 import Data.HKD (FFoldable (..), FFunctor (..), FTraversable (..), ffoldMapDefault, ffmapDefault)
 import Data.Kind (Type)
+import Data.IORef (newIORef, atomicModifyIORef')
 import Data.Word (Word64)
 import System.Exit (die)
 import Yolk
@@ -110,6 +111,9 @@ main = case rules of
     putStrLn "\nConfigurable tree minimization"
     displayChoices "Mutable" (runMutable minimize)
     displayChoices "Persistent" (runPersistent minimize)
+    putStrLn "\nSolver-free optimal DAG minimization"
+    displayDagChoices "Mutable" (runMutable minimizeDag)
+    displayDagChoices "Persistent" (runPersistent minimizeDag)
 
 display :: String -> Either EGraphError Simplification -> IO ()
 display backend = \case
@@ -199,3 +203,76 @@ displayChoices backend = \case
       (Just (5, "(2 + (2 + 2))"))
       (Just (3, "if (1 == 1) then (2 + 2) else (2 + 2)"))
       (Just ((0, 5), "(2 + (2 + 2))"))
+
+data DagChoices = DagChoices
+  { treeChoice :: Maybe (Word64, String)
+  , sharedChoice :: Maybe (DagResult (Dag Math 'Number))
+  , weightedChoice :: Maybe (DagResult (Dag Math 'Number))
+  , limitedChoice :: Maybe (DagResult (Dag Math 'Number))
+  }
+
+minimizeDag :: Backend b m => EGraphT b r Math m DagChoices
+minimizeDag = do
+  let one = term (Lit 1)
+      pair = term (Add one one)
+  smallTree <- addTerm (term (Add one (term (Add (term (Lit 2)) one))))
+  shared <- addTerm (term (Mul pair pair))
+  -- Both expressions equal four. The first has five tree nodes and four
+  -- distinct nodes; the second has seven tree nodes but only three distinct
+  -- nodes. Choosing a minimum tree and deduplicating it is insufficient.
+  void (union smallTree shared)
+  tree <- extractWith astSize smallTree
+  let exact = defaultDagLimits & O.expansionLimit .~ Nothing
+      seedOnly = defaultDagLimits & O.expansionLimit .~ Just 0
+  best <- extractDagOptimal exact dagSizeCost smallTree
+  weighted <- extractDagOptimal exact operationWeight smallTree
+  limited <- extractDagOptimal seedOnly dagSizeCost smallTree
+  pure (DagChoices (fmap (\(c, t) -> (c, pretty t)) tree) best weighted limited)
+
+displayDagChoices :: String -> Either EGraphError DagChoices -> IO ()
+displayDagChoices backend = \case
+  Left err -> die (backend ++ " DAG extraction failed: " ++ show err)
+  Right choices -> case (sharedChoice choices, weightedChoice choices, limitedChoice choices) of
+    (Just best, Just weighted, Just limited) -> do
+      putStrLn ("\n" ++ backend ++ " backend")
+      putStrLn ("  Tree optimum: " ++ show (treeChoice choices))
+      displayCertificate "DAG optimum" best
+      displayCertificate "Weighted DAG" weighted
+      displayCertificate "Zero-expansion budget" limited
+      putStrLn "  Shared code (each algebra action runs once):"
+      counter <- newIORef (0 :: Int)
+      let emit :: Math s (Const String) -> IO (Const String s)
+          emit layer = do
+            ident <- atomicModifyIORef' counter (\i -> (i + 1, i))
+            let name = "n" ++ show ident
+            putStrLn ("    " ++ name ++ " = " ++ renderLayer layer)
+            pure (Const name)
+      Const name <- foldDagM emit (dag best)
+      putStrLn ("    result = " ++ name)
+      if treeChoice choices == Just (5, "(1 + (2 + 1))")
+          && dagCost best == 3 && dagSize (dag best) == 3
+          && optimality best == Optimal && lowerBound best == 3
+          && pretty (dagToTerm (dag best)) == "((1 + 1) * (1 + 1))"
+          && dagCost weighted == 4 && optimality weighted == Optimal
+          && pretty (dagToTerm (dag weighted)) == "(1 + (2 + 1))"
+          && optimality limited == Unproven && expansions limited == 0
+          && lowerBound limited <= 3 && dagCost limited >= 3
+        then pure ()
+        else die (backend ++ " did not produce the expected DAG choices")
+    _ -> die (backend ++ " unexpectedly has no finite DAG")
+  where
+    displayCertificate label result = putStrLn
+      ("  " ++ label ++ ": cost " ++ show (dagCost result)
+        ++ ", lower bound " ++ show (lowerBound result)
+        ++ ", " ++ show (optimality result)
+        ++ ", expansions " ++ show (expansions result)
+        ++ ", " ++ pretty (dagToTerm (dag result)))
+
+renderLayer :: Math s (Const String) -> String
+renderLayer = \case
+  Lit n -> show n
+  BoolLit b -> show b
+  Add (Const a) (Const b) -> a ++ " + " ++ b
+  Mul (Const a) (Const b) -> a ++ " * " ++ b
+  Equal (Const a) (Const b) -> a ++ " == " ++ b
+  If (Const c) (Const t) (Const e) -> "if " ++ c ++ " then " ++ t ++ " else " ++ e

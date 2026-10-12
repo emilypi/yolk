@@ -36,6 +36,21 @@ opticsTests = testGroup "lens API"
              , lensLaws O.finalNodes result x y
              , lensLaws O.stopReason result NodeLimit MatchLimit
              ]
+  , QC.testProperty "DAG budget lens obeys the lens laws" $ \limit x y ->
+      lensLaws O.expansionLimit (DagLimits limit) x y
+  , testCase "optimality prisms obey matching and round-trip laws" $ do
+      prismLaws O._Optimal [()] [Optimal, Unproven]
+      prismLaws O._Unproven [()] [Optimal, Unproven]
+  , both "DAG getters compose without exposing mutable certificates"
+      (Just (2, 2, Optimal, True, Just (), 1, "(7 + 7)", "add")) $ Program $ do
+        root <- addTerm (plus (number 7) (number 7))
+        result <- extractDagOptimal (defaultDagLimits & O.expansionLimit .~ Nothing) dagSizeCost root
+        pure (fmap (\r ->
+          ( r ^. O.dagCost, r ^. O.lowerBound, r ^. O.optimality
+          , r ^. O.expansions == expansions r, r ^? O.optimality . O._Optimal
+          , r ^. O.dag . O.dagNodeId, pretty (dagToTerm (r ^. O.dag))
+          , operatorKey (ffmap (const (Const ())) (r ^. O.dag . O.dagNode))
+          )) result)
   , testCase "term iso composes with a language prism and round-trips" $ do
       let input = plus (number 2) (number 3)
           rebuilt = review O._Term (view O._Term input)
@@ -72,7 +87,7 @@ opticsTests = testGroup "lens API"
       prismLaws O._MatchLimit [()] reasons
   , testCase "error prisms preserve payloads and unmatched errors" $ do
       let graphErrors = [DirtyGraph, UnknownClass 5, SortMismatch 7,
-                         InvalidLimits, InvalidBinding "x", CostOverflow]
+                         InvalidLimits, InvalidBinding "x", CostOverflow, InvalidExtraction]
           ruleErrors = [UnboundVariable "x", VariableSortMismatch "y"]
       prismLaws O._DirtyGraph [()] graphErrors
       prismLaws O._UnknownClass [0, 2, maxBound] graphErrors
@@ -80,6 +95,7 @@ opticsTests = testGroup "lens API"
       prismLaws O._InvalidLimits [()] graphErrors
       prismLaws O._InvalidBinding ["", "x"] graphErrors
       prismLaws O._CostOverflow [()] graphErrors
+      prismLaws O._InvalidExtraction [()] graphErrors
       prismLaws O._UnboundVariable ["", "x"] ruleErrors
       prismLaws O._VariableSortMismatch ["", "x"] ruleErrors
   , both "limit lenses configure the runner and result lenses compose with prisms"

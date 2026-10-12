@@ -60,4 +60,5 @@ data EGraphError
   | InvalidLimits
   | InvalidBinding !String
   | CostOverflow
+  | InvalidExtraction -- ^ Internal inconsistency while reconstructing a typed DAG.
   deriving (Eq, Show)

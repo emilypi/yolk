@@ -5,11 +5,12 @@
 -- result. The example executable demonstrates a two-sort language.
 module Yolk
   ( module Yolk.Language, module Yolk.EGraph, module Yolk.Rewrite
-  , module Yolk.Extract, Mutable, Persistent, Backend
+  , module Yolk.Extract, module Yolk.Extract.Dag, Mutable, Persistent, Backend
   ) where
 
 import Yolk.Backend (Backend, Mutable, Persistent)
 import Yolk.EGraph
 import Yolk.Extract
+import Yolk.Extract.Dag
 import Yolk.Language
 import Yolk.Rewrite
