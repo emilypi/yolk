@@ -1,0 +1,6 @@
+packages: .
+with-compiler: ghc-9.14.1
+allow-newer: hkd:base
+jobs: 1
+tests: True
+optimization: 2

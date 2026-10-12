@@ -1,0 +1,128 @@
+# Core implementation
+
+I use the tested many-sorted boundary as the starting point for the library.
+The public API is in `src/`; research logs remain supporting material.
+This document describes the code that exists and the requirements it has
+not yet met.
+
+| Module | Implemented responsibility | Source |
+| --- | --- | --- |
+| `Yolk.Language` | HKD language law, typed finite terms, opaque graph identities | `hkd-0.2.1`, `Data.HKD` |
+| `Yolk.Backend` | Unboxed mutable and immutable persistent union-find, union by size, read-only find | Sedgewick and Wayne, weighted quick-union |
+| `Yolk.EGraph` | Region-scoped runners, add/lookup, union, rebuilding, snapshots and membership | Willsey et al., egg, POPL 2021 |
+| `Yolk.Rewrite` | Typed pattern registration, visible-member search, bounded search/apply iteration | Willsey et al., egg, POPL 2021 |
+| `Yolk.Extract` | Positive AST-size tree-cost relaxation, finite-tree extraction through cyclic graphs | egg extraction; Knuth, 1977 |
+
+## Identity and sorts
+
+`ClassId r s` is opaque, with nominal roles for both its graph region and
+sort. Rank-2 runners generate `r`. `runMutable` additionally quantifies the
+`ST` token. A finite `Term l s` can leave the runner; an identity cannot
+escape as an identity for a caller-chosen region. Compile-negative tests
+cover mixed sorts, sort coercion, region mixing, and region escape.
+
+Every allocated node retains its original syntax and sort witness. The
+interned key contains the result `SomeTypeRep`, a language-supplied
+constructor/payload key, and ordered canonical child IDs. A language must
+supply an injective operator key within a result sort, including the sorts
+of child positions. Violating that law invalidates interning semantics;
+it cannot cause the core to perform an unchecked cast.
+
+The current representation stores sort witnesses with identities and boxed
+typed nodes in maps. Unboxed per-operator rows are pending. Their decoder
+must preserve the same sort and region boundary before replacing this
+representation.
+
+## Backends and rebuilding
+
+The backend class supplies allocation, find, union, and allocated-ID count.
+Mutable parents and sizes occupy growable `MutablePrimArray`s under
+`PrimMonad`. Persistent parents and sizes are immutable `IntMap`s, so old
+backend values can be branched. Both choose the larger class as parent,
+breaking equal-size ties by the smaller root ID. Find is read-only; no
+search query path compresses mutable parents. Raw backend methods require
+valid IDs; the graph validates IDs before invoking them.
+
+Union marks the graph dirty. Rebuilding canonicalizes all child IDs and
+merges duplicate keys, then repeats if congruence discovered another union.
+Each such union reduces the number of classes, so the finite store reaches
+a fixpoint. Retired node handles remain valid through the union-find and
+original-node table. Collision membership is the disjunction of the two
+visibility flags.
+
+This whole-store algorithm is a correctness baseline. Replace it with
+occurrence queues while retaining the behavioral and independent-model
+tests. Performance work must measure both backends and cannot infer zero
+allocation from `INLINABLE` alone.
+
+## Search and extraction
+
+A snapshot contains immutable typed rows and a complete map from allocated
+IDs to the representatives at capture time. It contains no mutable array
+references. Rewrites search a common snapshot before applying any result.
+RHS variables must be bound by the LHS at the same sort; registration checks
+this before the rule can be run.
+
+Patterns enumerate visible members. They do not currently use the pinned
+egg compiler's bound non-leaf memo optimization. After pruning, memo lookup
+and member enumeration are distinct operations. The planned relational
+compiler must retain an explicit policy here and maintain visibility in
+its indexes and deltas. No whole-matcher equivalence to egg is claimed.
+
+The runner exposes iteration, node, and match limits. It rejects a
+truncated search without applying any of that iteration. A rewrite applies
+atomically before the node-limit check. The reported graph is rebuilt even
+on a budget stop. The current scheduler is deterministic and unthrottled;
+backoff scheduling remains to be implemented.
+
+Tree extraction relaxes positive AST-size costs over visible members.
+Costs strictly improve until the least finite tree cost is reached. A
+cycle with no finite visible derivation yields `Nothing`; cycles with
+finite alternatives are supported. Internal costs use `Integer`, and an
+unrepresentable public `Int` result reports `CostOverflow`. This is not an
+optimal DAG extractor or a claim that saturation has finished.
+
+## Tests and acceptance
+
+The source tests exercise both interpreters through the same public graph
+programs, including stale identities, typed interning, congruence chains,
+pruning/reinterning, snapshots, rewrite registration, budget stops, and
+cyclic extraction. Property tests compare generated equalities with an
+independent finite closure model. The example combines numeric and boolean
+rules and checks its results at runtime.
+
+Build and test with GHC 9.14.1:
+
+```sh
+cabal build all --ghc-options=-Werror
+cabal test all --test-show-details=direct
+sh test/check-types.sh
+cabal run yolk-example
+```
+
+## Next implementation increments
+
+1. Add the generic analysis contract with value/witness pairing, parent
+   remaking, and retention plans. Ground-witness equality must precede
+   pruning; a non-ground root-to-constant edge is not a ground proof.
+2. Add explanation production and its independent sorted checker, carrying
+   original terms and saved match evidence across rebuild/pruning.
+3. Replace boxed storage and whole-store work with per-operator arrays,
+   occurrence queues and relational matching, retaining both backends.
+4. Integrate inspection tests, upstream suites, and hegg comparisons before
+   making allocation, parity, or speed claims.
+5. Implement the remaining accepted v1 packages: solver-free optimal DAG
+   extraction, egglog-style rules, slotted e-graphs, and deriving support.
+
+These are outstanding requirements, not removed scope. The earlier
+allocation-criterion question remains unanswered; this implementation
+does not amend it.
+
+## References
+
+- [egg: Fast and Extensible Equality Saturation](https://doi.org/10.1145/3434304),
+  Willsey et al., POPL 2021.
+- [A generalization of Dijkstra's algorithm](https://doi.org/10.1016/0020-0190(77)90002-3),
+  Knuth, 1977.
+- [Weighted quick-union](https://algs4.cs.princeton.edu/15uf/WeightedQuickUnionUF.java.html),
+  Sedgewick and Wayne.

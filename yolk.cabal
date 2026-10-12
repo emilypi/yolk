@@ -1,0 +1,63 @@
+cabal-version: 3.0
+name: yolk
+version: 0.1.0.0
+synopsis: Many-sorted equality saturation over higher-kinded languages
+description: Typed e-graphs with mutable and persistent storage, rewriting,
+             and extraction. This is an initial implementation of the core.
+license: BSD-3-Clause
+license-file: LICENSE
+author: Emily Pillmore
+maintainer: emilypi@cohomolo.gy
+copyright: (c) 2026 Emily Pillmore
+category: Data, Compilers
+build-type: Simple
+tested-with: GHC == 9.14.1
+extra-source-files:
+  README.md
+  docs/design.md
+  test/check-types.sh
+  test/compile-fail/*.hs
+
+common settings
+  default-language: GHC2024
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-uni-patterns
+  build-depends: base >= 4.22 && < 4.23
+
+library
+  import: settings
+  hs-source-dirs: src
+  exposed-modules:
+    Yolk
+    Yolk.Language
+    Yolk.EGraph
+    Yolk.Rewrite
+    Yolk.Extract
+    Yolk.Backend
+  other-modules:
+    Yolk.Internal.Types
+    Yolk.Internal.Graph
+  build-depends:
+    containers >= 0.7 && < 0.9,
+    hkd == 0.2.1,
+    primitive >= 0.9 && < 0.10,
+    transformers >= 0.6 && < 0.7
+
+test-suite yolk-tests
+  import: settings
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: Main.hs
+  other-modules: TestLanguage
+  build-depends:
+    yolk,
+    hkd,
+    containers,
+    tasty >= 1.5 && < 1.6,
+    tasty-hunit >= 0.10 && < 0.11,
+    tasty-quickcheck >= 0.11 && < 0.12
+
+executable yolk-example
+  import: settings
+  hs-source-dirs: examples
+  main-is: Main.hs
+  build-depends: yolk, hkd
