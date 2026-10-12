@@ -32,6 +32,7 @@ library
     Yolk.EGraph
     Yolk.Rewrite
     Yolk.Extract
+    Yolk.Optics
     Yolk.Backend
   other-modules:
     Yolk.Internal.Types
@@ -39,6 +40,7 @@ library
   build-depends:
     containers >= 0.7 && < 0.9,
     hkd == 0.2.1,
+    lens >= 5.3 && < 5.4,
     primitive >= 0.9 && < 0.10,
     transformers >= 0.6 && < 0.7
 
@@ -47,10 +49,11 @@ test-suite yolk-tests
   type: exitcode-stdio-1.0
   hs-source-dirs: test
   main-is: Main.hs
-  other-modules: TestLanguage TestSupport ExtractionTests
+  other-modules: TestLanguage TestSupport ExtractionTests OpticsTests
   build-depends:
     yolk,
     hkd,
+    lens,
     containers,
     tasty >= 1.5 && < 1.6,
     tasty-hunit >= 0.10 && < 0.11,
@@ -60,4 +63,4 @@ executable yolk-example
   import: settings
   hs-source-dirs: examples
   main-is: Main.hs
-  build-depends: yolk, hkd
+  build-depends: yolk, hkd, lens

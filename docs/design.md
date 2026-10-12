@@ -12,6 +12,7 @@ not yet met.
 | `Yolk.EGraph` | Region-scoped runners, add/lookup, union, rebuilding, snapshots and membership | Willsey et al., egg, POPL 2021 |
 | `Yolk.Rewrite` | Typed pattern registration, visible-member search, bounded search/apply iteration | Willsey et al., egg, POPL 2021 |
 | `Yolk.Extract` | Configurable ordered tree-cost relaxation, finite-tree extraction through cyclic graphs | egg extraction; Knuth, 1977 |
+| `Yolk.Optics` | Typed term/pattern optics, record lenses, error and stop-reason prisms | `lens` |
 
 ## Identity and sorts
 
@@ -98,6 +99,13 @@ that saturated domain, so unrepresentable costs tie at `maxBound`.
 tuple through `extractWith`. This is not an optimal DAG extractor or a
 claim that saturation has finished.
 
+`Yolk.Optics` is imported separately because its record lens names match
+existing field accessors. An iso exposes a term's typed constructor layer;
+prisms distinguish pattern variables and nodes at the same sort. Only a
+validated rewrite's name is editable: changing either body still requires
+the `rewrite` validator. There are no optics exposing identity indices,
+region witnesses, or snapshot internals.
+
 ## Tests and acceptance
 
 The source tests exercise both interpreters through the same public graph
@@ -107,6 +115,7 @@ cyclic extraction. Property tests compare generated equalities with an
 independent finite closure model and configurable minimum costs with
 exhaustive enumeration of small finite grammars. Arithmetic boundary tests
 check Word64 saturation against unbounded arithmetic in the test oracle.
+Optic laws and compositions are exercised using actual `lens` operators.
 The example combines numeric and boolean rules and checks several cost
 models at runtime with both backends.
 

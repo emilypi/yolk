@@ -8,7 +8,8 @@ language. E-class identities preserve those indices.
 The first implementation is in `src/`. It provides a mutable backend in
 `ST` or another `PrimMonad`, a persistent backend, canonical interning,
 deferred congruence rebuilding, typed rewrites, bounded equality saturation,
-immutable search snapshots, pruning, and configurable tree minimization.
+immutable search snapshots, pruning, configurable tree minimization, and
+optics compatible with `lens`.
 The same graph program runs against either backend.
 
 ## Build and run
@@ -157,6 +158,32 @@ secondary objective explicitly if ties matter.
 Each call minimizes over the current visible e-graph and returns `Nothing`
 when no finite visible tree exists. Repeated children count per occurrence;
 this is tree minimization. Optimal DAG extraction remains outstanding.
+
+## Optics
+
+Import `Yolk.Optics` qualified; its record lenses use the same names as the
+existing accessors, which remain available from `Yolk`:
+
+```haskell
+import Control.Lens ((&), (.~), (^.), (^?), _Just, _1, review)
+import qualified Yolk.Optics as O
+
+limits = defaultLimits & O.iterationLimit .~ 100
+                       & O.nodeLimit .~ 200000
+reason = result ^. O.stopReason
+finished = result ^? O.stopReason . O._Saturated
+bestCost = extracted ^? _Just . _1
+
+x :: Pattern Math 'Number
+x = review O._Var "x"
+```
+
+The module provides lenses for every `Limits` and `RunResult` field and
+`rewriteName`, an `_Term` iso for one typed term layer, `_Var` and `_Node`
+pattern prisms, and prisms for every stop reason, rule error, and graph
+error. Compose `_Term` with prisms for your own language constructors.
+Term and pattern optics preserve sorts. Graph identities and snapshots
+stay opaque; changed rewrite bodies must pass through `rewrite` again.
 
 ## Rebuilding, snapshots, and pruning
 

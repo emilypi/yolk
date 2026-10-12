@@ -10,6 +10,7 @@ import Test.Tasty (TestTree, defaultMain, localOption, testGroup)
 import Test.Tasty.HUnit (Assertion, assertBool, assertEqual, assertFailure, testCase)
 import qualified Test.Tasty.QuickCheck as QC
 import ExtractionTests (customExtractionTests)
+import OpticsTests (opticsTests)
 import TestLanguage
 import TestSupport
 import Yolk
@@ -21,6 +22,7 @@ main = defaultMain $ localOption (QC.QuickCheckTests 200) $ testGroup "yolk"
   , ruleTests
   , extractionTests
   , customExtractionTests
+  , opticsTests
   , propertyTests
   ]
 

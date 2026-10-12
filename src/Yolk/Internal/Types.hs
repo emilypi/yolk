@@ -40,6 +40,15 @@ type Term :: (k -> (k -> Type) -> Type) -> k -> Type
 data Term l s where
   Term :: Typeable s => l s (Term l) -> Term l s
 
+-- Kept internal so constructor optics can share the representation without
+-- exposing sort witnesses or bypassing rewrite validation in the public API.
+data Pattern l s where
+  PVar :: !(TypeRep s) -> !String -> Pattern l s
+  PNode :: !(TypeRep s) -> !(l s (Pattern l)) -> Pattern l s
+
+data Rewrite l where
+  Rewrite :: !String -> !(Pattern l s) -> !(Pattern l s) -> Rewrite l
+
 erase :: Language l => l s f -> l s (Const ())
 erase = ffmap (const (Const ()))
 {-# INLINE erase #-}

@@ -22,19 +22,12 @@ import Yolk.Backend (Backend)
 import Yolk.Internal.Graph
 import Yolk.Internal.Types
 
-data Pattern l s where
-  PVar :: !(TypeRep s) -> !String -> Pattern l s
-  PNode :: !(TypeRep s) -> !(l s (Pattern l)) -> Pattern l s
-
 -- | A named variable at a known sort. Repeated names impose equality.
 var :: Typeable s => String -> Pattern l s
 var = PVar typeRep
 
 node :: Typeable s => l s (Pattern l) -> Pattern l s
 node = PNode typeRep
-
-data Rewrite l where
-  Rewrite :: !String -> !(Pattern l s) -> !(Pattern l s) -> Rewrite l
 
 data RuleError
   = UnboundVariable !String

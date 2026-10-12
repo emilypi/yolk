@@ -2,6 +2,7 @@
 -- many-sorted terms; all graph operations go through the public Yolk API.
 module Main (main) where
 
+import Control.Lens ((&), (.~), (^.), review)
 import Control.Monad (void)
 import Data.Functor.Const (Const (..))
 import Data.HKD (FFoldable (..), FFunctor (..), FTraversable (..), ffoldMapDefault, ffmapDefault)
@@ -9,6 +10,7 @@ import Data.Kind (Type)
 import Data.Word (Word64)
 import System.Exit (die)
 import Yolk
+import qualified Yolk.Optics as O
 
 data Sort = Number | Boolean
 
@@ -73,8 +75,8 @@ rules = sequence
   ]
   where
     x, y :: Pattern Math 'Number
-    x = var "x"
-    y = var "y"
+    x = review O._Var "x"
+    y = review O._Var "y"
 
 data Simplification = Simplification
   { reason :: StopReason
@@ -86,11 +88,12 @@ simplify :: Backend b m => [Rewrite Math] -> EGraphT b r Math m Simplification
 simplify rewrites = do
   numericRoot <- addTerm expression
   booleanRoot <- addTerm condition
-  result <- run defaultLimits rewrites
+  let limits = defaultLimits & O.iterationLimit .~ 20
+  result <- run limits rewrites
   numeric <- extract numericRoot
   boolean <- extract booleanRoot
   pure Simplification
-    { reason = stopReason result
+    { reason = result ^. O.stopReason
     , numericResult = fmap (\(cost, tree) -> (cost, pretty tree)) numeric
     , booleanResult = fmap (\(cost, tree) -> (cost, pretty tree)) boolean
     }
