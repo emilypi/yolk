@@ -275,6 +275,25 @@ restore it. When a hidden and visible occurrence collide, visibility is
 retained. An analysis may prune again after merging. The matcher and
 extractor enumerate visible nodes; `lookupNode` probes retained identity.
 
+## Benchmarks and regressions
+
+`cabal bench yolk-bench` runs deterministic interning, rebuilding, rewriting,
+tree extraction, and solver-free DAG workloads on both backends using
+`tasty-bench`. Shared test vectors check closed-form answers and budget
+certificates in the normal test suite and before timing. Timed results force
+the extracted witnesses; every invocation starts from a fresh graph.
+
+```sh
+cabal bench yolk-bench --offline \
+  --benchmark-options='--baseline bench/baseline.csv --fail-if-slower 10 --csv bench/current.csv --stdev 2 --timeout 3s'
+cabal run yolk-bench-report --offline -- bench/baseline.csv bench/current.csv
+```
+
+The comparison tool uses `statistics` to summarize matched runtime ratios
+and rejects mismatched or invalid CSV inputs. The checked-in baseline is
+machine-specific. See [workloads, measurement boundaries, and baseline
+instructions](bench/README.md) before interpreting a comparison.
+
 ## Implementation status
 
 This is an initial core, not the completed v1 described in the intake.

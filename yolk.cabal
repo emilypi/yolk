@@ -15,7 +15,11 @@ tested-with: GHC == 9.14.1
 extra-source-files:
   README.md
   docs/design.md
+  bench/README.md
+  bench/baseline.csv
+  bench/baseline.md
   test/check-types.sh
+  test/check-bench-gate.sh
   test/compile-fail/*.hs
 
 common settings
@@ -49,14 +53,19 @@ library
 test-suite yolk-tests
   import: settings
   type: exitcode-stdio-1.0
-  hs-source-dirs: test
+  hs-source-dirs: test bench-support bench-report
   main-is: Main.hs
-  other-modules: TestLanguage TestSupport ExtractionTests DagExtractionTests OpticsTests
+  other-modules:
+    TestLanguage TestSupport ExtractionTests DagExtractionTests OpticsTests
+    BenchVectors BenchmarkTests BenchReport BenchmarkReportTests
   build-depends:
     yolk,
     hkd,
     lens,
     containers,
+    deepseq >= 1.5 && < 1.6,
+    statistics >= 0.16.5 && < 0.17,
+    vector >= 0.13 && < 0.14,
     tasty >= 1.5 && < 1.6,
     tasty-hunit >= 0.10 && < 0.11,
     tasty-quickcheck >= 0.11 && < 0.12
@@ -66,3 +75,26 @@ executable yolk-example
   hs-source-dirs: examples
   main-is: Main.hs
   build-depends: yolk, hkd, lens
+
+benchmark yolk-bench
+  import: settings
+  type: exitcode-stdio-1.0
+  hs-source-dirs: bench bench-support
+  main-is: Main.hs
+  other-modules: BenchVectors
+  ghc-options: -rtsopts "-with-rtsopts=-T -A32m" -fproc-alignment=64
+  build-depends:
+    yolk,
+    hkd,
+    deepseq >= 1.5 && < 1.6,
+    tasty-bench >= 0.5.1 && < 0.6
+
+executable yolk-bench-report
+  import: settings
+  hs-source-dirs: bench-report
+  main-is: Main.hs
+  other-modules: BenchReport
+  build-depends:
+    containers >= 0.7 && < 0.9,
+    statistics >= 0.16.5 && < 0.17,
+    vector >= 0.13 && < 0.14

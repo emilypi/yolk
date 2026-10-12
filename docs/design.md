@@ -198,6 +198,33 @@ sh test/check-types.sh
 cabal run yolk-example
 ```
 
+## Benchmarking
+
+`yolk-bench` uses tasty-bench with 13 deterministic vectors on both backends.
+The inputs and their closed-form expectations are shared with the regression
+suite in `bench-support/BenchVectors.hs`. Measured calls build a fresh graph,
+perform the operation, and fully force a strict observation including a
+traversal of every extracted node. Vector setup and correctness checks run
+before the timing loop. This boundary includes construction and observation;
+it does not isolate extraction from graph building.
+
+The initial workloads cover fresh/repeated interning, congruence propagation,
+identity rewriting, tree versus DAG sharing, weighted branching, a bounded
+search, and productive/nonproductive cycles. Synthetic node payloads and
+costs use Word64. No production API or solver algorithm is changed for timing.
+
+Native tasty-bench CSV baselines provide the existing 10% slowdown gate.
+`yolk-bench-report` uses statistics for descriptive geometric means and
+log-ratio dispersion across workloads, with strict matching-name validation.
+The report does not infer statistical significance or replace individual
+regression failures. A script checks that the native gate accepts a control
+and rejects a deliberately synthetic regression baseline. The recorded local
+baseline includes environment and command metadata in `bench/baseline.md`.
+See `bench/README.md` for reproducible commands and measurement limits.
+
+The full v1 benchmark matrix, upstream corpora, hegg comparisons, and
+allocation acceptance gates are still outstanding.
+
 ## Next implementation increments
 
 1. Add the generic analysis contract with value/witness pairing, parent

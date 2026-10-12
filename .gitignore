@@ -4,3 +4,5 @@ logs/
 *.o
 *.hi
 *.dump-*
+bench/current.csv
+bench/new-baseline.csv

@@ -3,4 +3,9 @@ with-compiler: ghc-9.14.1
 allow-newer: hkd:base
 jobs: 1
 tests: True
+benchmarks: True
 optimization: 2
+
+-- Align library and harness code consistently for local baseline comparisons.
+package yolk
+  ghc-options: -fproc-alignment=64

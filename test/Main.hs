@@ -11,6 +11,8 @@ import Test.Tasty.HUnit (Assertion, assertBool, assertEqual, assertFailure, test
 import qualified Test.Tasty.QuickCheck as QC
 import ExtractionTests (customExtractionTests)
 import DagExtractionTests (dagExtractionTests)
+import BenchmarkTests (benchmarkTests)
+import BenchmarkReportTests (benchmarkReportTests)
 import OpticsTests (opticsTests)
 import TestLanguage
 import TestSupport
@@ -24,6 +26,8 @@ main = defaultMain $ localOption (QC.QuickCheckTests 200) $ testGroup "yolk"
   , extractionTests
   , customExtractionTests
   , dagExtractionTests
+  , benchmarkTests
+  , benchmarkReportTests
   , opticsTests
   , propertyTests
   ]
