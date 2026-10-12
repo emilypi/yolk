@@ -1,0 +1,5 @@
+throttle: waiting for a slot
+throttle: acquired after 0s
+cmd: ghc-9.14.1 -fno-code -Wall Sketch3.hs
+[1 of 1] Compiling Sketch3          ( Sketch3.hs, nothing )
+sketch3 exit 0
