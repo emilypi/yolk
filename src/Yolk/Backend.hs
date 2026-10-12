@@ -86,24 +86,23 @@ instance PrimMonad m => Backend Mutable m where
     !(MutablePrimArray (PrimState m) Int)
     !(MutablePrimArray (PrimState m) Int)
 
-  {-# INLINABLE ufEmpty #-}
   ufEmpty = do
     parents <- newPrimArray 0
     sizes <- newPrimArray 0
     pure (MutableUF 0 0 parents sizes)
+  {-# INLINABLE ufEmpty #-}
 
-  {-# INLINABLE ufFresh #-}
   ufFresh store@(MutableUF count _ _ _) = do
     let !count' = incrementCount maxMutableCount count
     MutableUF _ capacity parents sizes <- ensureCapacity store
     writePrimArray parents count count
     writePrimArray sizes count 1
     pure (count, MutableUF count' capacity parents sizes)
+  {-# INLINABLE ufFresh #-}
 
-  {-# INLINABLE ufFind #-}
   ufFind (MutableUF _ _ parents _) = findMutable parents
+  {-# INLINABLE ufFind #-}
 
-  {-# INLINABLE ufUnion #-}
   ufUnion store@(MutableUF _ _ parents sizes) left right = do
     leftRoot <- findMutable parents left
     rightRoot <- findMutable parents right
@@ -117,9 +116,10 @@ instance PrimMonad m => Backend Mutable m where
         writePrimArray parents loser winner
         writePrimArray sizes winner mergedSize
         pure (True, store)
+  {-# INLINABLE ufUnion #-}
 
-  {-# INLINABLE ufCount #-}
   ufCount (MutableUF count _ _ _) = count
+  {-# INLINABLE ufCount #-}
 
 instance Monad m => Backend Persistent m where
   data UnionFind Persistent m = PersistentUF
@@ -127,22 +127,21 @@ instance Monad m => Backend Persistent m where
     !(IntMap Int)
     !(IntMap Int)
 
-  {-# INLINABLE ufEmpty #-}
   ufEmpty = pure (PersistentUF 0 IntMap.empty IntMap.empty)
+  {-# INLINABLE ufEmpty #-}
 
-  {-# INLINABLE ufFresh #-}
   ufFresh (PersistentUF count parents sizes) =
     let !count' = incrementCount maxBound count
         !parents' = IntMap.insert count count parents
         !sizes' = IntMap.insert count 1 sizes
     in pure (count, PersistentUF count' parents' sizes')
+  {-# INLINABLE ufFresh #-}
 
-  {-# INLINABLE ufFind #-}
   ufFind (PersistentUF _ parents _) node =
     let !root = findPersistent parents node
     in pure root
+  {-# INLINABLE ufFind #-}
 
-  {-# INLINABLE ufUnion #-}
   ufUnion store@(PersistentUF count parents sizes) left right =
     let !leftRoot = findPersistent parents left
         !rightRoot = findPersistent parents right
@@ -156,50 +155,50 @@ instance Monad m => Backend Persistent m where
             !parents' = IntMap.insert loser winner parents
             !sizes' = IntMap.insert winner mergedSize sizes
         in pure (True, PersistentUF count parents' sizes')
+  {-# INLINABLE ufUnion #-}
 
-  {-# INLINABLE ufCount #-}
   ufCount (PersistentUF count _ _) = count
+  {-# INLINABLE ufCount #-}
 
 -- Only roots have meaningful sizes. Distinct roots describe disjoint sets,
 -- so their size sum is at most the allocated count and cannot overflow.
-{-# INLINABLE linkOrder #-}
 linkOrder :: Int -> Int -> Int -> Int -> (Int, Int)
 linkOrder leftRoot leftSize rightRoot rightSize
   | leftSize > rightSize || (leftSize == rightSize && leftRoot < rightRoot) =
       (leftRoot, rightRoot)
   | otherwise = (rightRoot, leftRoot)
+{-# INLINABLE linkOrder #-}
 
-{-# INLINABLE findMutable #-}
 findMutable :: PrimMonad m => MutablePrimArray (PrimState m) Int -> Int -> m Int
 findMutable parents = go
   where
     go !node = do
       parent <- readPrimArray parents node
       if parent == node then pure node else go parent
+{-# INLINABLE findMutable #-}
 
-{-# INLINABLE findPersistent #-}
 findPersistent :: IntMap Int -> Int -> Int
 findPersistent parents = go
   where
     go !node =
       let !parent = parents IntMap.! node
       in if parent == node then node else go parent
+{-# INLINABLE findPersistent #-}
 
 -- primitive multiplies element count by element size when allocating.
 -- Bound that product as well as the public Int count.
 maxMutableCount :: Int
 maxMutableCount = maxBound `quot` sizeOf (0 :: Int)
 
-{-# INLINABLE incrementCount #-}
 incrementCount :: Int -> Int -> Int
 incrementCount limit count
   | count >= limit = error "Yolk.Backend.ufFresh: maximum element count reached"
   | otherwise = count + 1
+{-# INLINABLE incrementCount #-}
 
 -- Called only after checking that another element fits. Capacity doubles
 -- geometrically until it reaches the byte-size limit. Only [0, count) has
 -- initialized parent and size entries; spare capacity must never be read.
-{-# INLINABLE ensureCapacity #-}
 ensureCapacity :: PrimMonad m => UnionFind Mutable m -> m (UnionFind Mutable m)
 ensureCapacity store@(MutableUF count capacity parents sizes)
   | count < capacity = pure store
@@ -213,3 +212,4 @@ ensureCapacity store@(MutableUF count capacity parents sizes)
       copyMutablePrimArray parents' 0 parents 0 count
       copyMutablePrimArray sizes' 0 sizes 0 count
       pure (MutableUF count capacity' parents' sizes')
+{-# INLINABLE ensureCapacity #-}

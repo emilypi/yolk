@@ -4,6 +4,10 @@ Deliver implementation in `src/`, public examples in `examples/`, and tests
 in `test/`. `logs/` contains historical research, not the library.
 
 - GHC 9.14.1, GHC2024, hkd 0.2.1; keep both backends and ST/PrimMonad.
+- Put function-specific compiler pragmas (INLINE, INLINABLE, NOINLINE,
+  SPECIALIZE, etc.) directly below the complete function definition,
+  including any where block. Keep LANGUAGE and field UNPACK pragmas in
+  their syntactically required positions.
 - At most three co-working agents including descendants; default to two.
   Run builds and benchmarks sequentially. Cabal is configured with one job.
 - Read the testing-patterns skill before adding tests. Follow the existing
