@@ -6,3 +6,10 @@ logs/
 *.dump-*
 bench/current.csv
 bench/new-baseline.csv
+*.log
+.Codex/
+.codex/
+.agents/
+AGENTS.md
+CLAUDE.md
+FOCUS.md
