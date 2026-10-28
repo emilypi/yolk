@@ -19,7 +19,13 @@
 -- I keep intern identity and visible membership separate. A hidden node
 -- remains available to congruence and hashconsing; pruning does not undo
 -- an equality. This first storage implementation retains typed boxed nodes.
-module Yolk.Internal.Graph where
+module Yolk.Internal.Graph
+  ( ClassId, classIdRep, classIdIndex, EGraphT, Stored (..), Snapshot
+  , snapshotRoots, snapshotRows, snapshotFind, snapshotClasses
+  , runEGraphT, runPersistent, runMutable, findClass, add, addAt, addTerm
+  , lookupNode, union, equivalent, rebuild, classNodes, hideNonLeaves
+  , nodeCount, graphRevision, freeze, snapshotNodes, throwGraph
+  ) where
 
 import Control.Monad (foldM, forM, unless, when)
 import Control.Monad.ST (ST, runST)
@@ -33,9 +39,31 @@ import qualified Data.IntSet as IS
 import qualified Data.Map.Strict as M
 import Data.Maybe (mapMaybe)
 import Data.Proxy (Proxy (..))
+import Data.Kind (Type)
 import Type.Reflection (SomeTypeRep (..), TypeRep, Typeable, eqTypeRep, typeRep, (:~~:) (HRefl))
 import Yolk.Backend
 import Yolk.Internal.Types
+
+-- | Graph-region and sort parameters are nominal: neither can be coerced.
+type ClassId :: Type -> k -> Type
+data ClassId r s = ClassId !(TypeRep s) !Int
+type role ClassId nominal nominal
+
+instance Eq (ClassId r s) where
+  ClassId _ a == ClassId _ b = a == b
+
+instance Ord (ClassId r s) where
+  compare (ClassId _ a) (ClassId _ b) = compare a b
+
+instance Show (ClassId r s) where
+  showsPrec p (ClassId _ n) = showParen (p > 10) (showString "ClassId " . shows n)
+
+classIdRep :: ClassId r s -> TypeRep s
+classIdRep (ClassId rep _) = rep
+
+classIdIndex :: ClassId r s -> Int
+classIdIndex (ClassId _ index) = index
+
 
 data Stored r l where
   Stored :: !(TypeRep s) -> !Int -> !(l s (ClassId r)) -> !Bool -> Stored r l
@@ -207,12 +235,18 @@ hideNonLeaves c = do
 nodeCount :: Monad m => EGraphT b r l m Int
 nodeCount = EGraphT (gets (IM.size . graphNodes))
 
+graphRevision :: Monad m => EGraphT b r l m Int
+graphRevision = EGraphT (gets graphVersion)
+
 -- | An immutable, region-scoped search view. It never references mutable
 -- arrays, and remains valid when the live graph changes or prunes members.
-data Snapshot r l = Snapshot
-  { snapshotRoots :: !(IM.IntMap Int)
-  , snapshotRows :: !(IM.IntMap (Stored r l))
-  }
+data Snapshot r l = Snapshot !(IM.IntMap Int) !(IM.IntMap (Stored r l))
+
+snapshotRoots :: Snapshot r l -> IM.IntMap Int
+snapshotRoots (Snapshot roots _) = roots
+
+snapshotRows :: Snapshot r l -> IM.IntMap (Stored r l)
+snapshotRows (Snapshot _ rows) = rows
 type role Snapshot nominal nominal
 
 freeze :: (Backend b m, Language l) => EGraphT b r l m (Snapshot r l)

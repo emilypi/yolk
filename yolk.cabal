@@ -37,9 +37,11 @@ library
     Yolk.Rewrite
     Yolk.Extract
     Yolk.Extract.Dag
+    Yolk.Extract.Pareto
+    Yolk.Dag
     Yolk.Optics
     Yolk.Backend
-  other-modules:
+    Yolk.Internal.Pareto
     Yolk.Internal.Types
     Yolk.Internal.Graph
     Yolk.Internal.Dag
@@ -56,7 +58,7 @@ test-suite yolk-tests
   hs-source-dirs: test bench-support bench-report
   main-is: Main.hs
   other-modules:
-    TestLanguage TestSupport ExtractionTests DagExtractionTests OpticsTests
+    TestLanguage TestSupport ExtractionTests DagExtractionTests ParetoExtractionTests OpticsTests
     BenchVectors BenchmarkTests BenchReport BenchmarkReportTests
   build-depends:
     yolk,

@@ -310,3 +310,63 @@ e-graphs, deriving support, and the
 full upstream test/benchmark corpus. The existing acceptance criteria are
 unchanged. [Design and next steps](docs/design.md) separates these from the
 working source.
+
+## Shared Pareto portfolios
+
+`Yolk.Extract.Pareto` searches a frozen visible graph for nondominated shared
+DAGs. It has a separate dominance API; `Ord` in `extractWith` continues to mean
+a lawful total order. Every vector coordinate is minimized and sums exact
+nonnegative `Natural` node weights, counted once across all requested roots.
+
+```haskell
+let options = (defaultParetoOptions 2)
+      { paretoUpperBounds = Just [100, 80]
+      , paretoExpansionLimit = Just 10000
+      }
+portfolio <- extractParetoMany options cost roots
+```
+
+`cost :: forall s. l s (Const ()) -> [Natural]` must return exactly the declared
+number of coordinates. Inputs, constants and other leaves cost whatever the
+caller assigns. Coordinates are structural model units: depth, routing,
+power and physical timing are not silently treated as additive node costs.
+
+The result separates vector coverage, feasibility, termination and witness
+coverage. `Complete` means all nondominated vectors in the current snapshot,
+under one representative per canonical e-class. It is not completeness over
+all equivalent programs. `Partial` means the expansion budget ended with
+unresolved vectors. A pending lower envelope can sometimes prove complete
+vector coverage even when witness enumeration stops at its work cap.
+`Approximate` reports a lossy archive cap: search stops with a deterministic
+subset and no epsilon guarantee. `paretoWitnessesComplete` independently says
+whether every nondominated selection was retained; the default keeps one
+witness per vector. Equal model costs do not establish equal physical results.
+
+`FeasibleFound`, `NoFeasibleFoundYet`, and `ProvenInfeasible` distinguish a
+witness from a limited search and a completed exclusion proof. In particular,
+a zero-budget seed can violate hard constraints while another valid selection
+exists. Invalid dimensions, excessive input sizes and unsupported option
+ranges return `ParetoError`; they never become favorable cost estimates.
+
+The search limits bound input rows, roots, dimensions, cost precision, retained
+vectors and witnesses. Exact accumulated `Natural` totals do not overflow.
+An expansion budget is not a wall-clock limit: snapshot construction, seeding,
+successor generation, and reconstruction also take work. Callers evaluating
+untrusted languages need cancellation and process-level resource limits.
+
+`Yolk.Dag` owns the immutable sorted representation and checked reconstruction.
+`foldDagManyM` and `foldDagMany` use one memo across a jointly extracted forest,
+so shared nodes are emitted once across outputs. Exact structural forest
+blueprints prevent unrelated local IDs from colliding when roots from separate
+extractions are combined. Identical structural forests may share fold effects.
+The existing scalar APIs and single-root folds remain available unchanged.
+
+`cabal run yolk-example` includes an illustrative three-point Pareto frontier
+on both backends, including a point no weighted scalar objective selects.
+These are demonstrative model costs, not measured circuit improvements.
+
+All library modules are exposed through Cabal. Graph identities, live graph
+state, immutable snapshots, validated rewrites, DAGs and Pareto result constructors remain opaque
+in their defining modules. Internal snapshot inspection returns immutable
+values through ordinary functions rather than record selectors that permit
+unchecked record updates.

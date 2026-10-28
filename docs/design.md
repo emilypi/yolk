@@ -252,3 +252,39 @@ does not amend it.
   Knuth, 1977.
 - [Weighted quick-union](https://algs4.cs.princeton.edu/15uf/WeightedQuickUnionUF.java.html),
   Sedgewick and Wayne.
+
+## Pareto extraction
+
+The additive-vector search keeps complete global class selections, preserving
+cross-root sharing. Its lower bound charges accumulated cost plus coordinatewise
+minimum weights for each distinct demanded but unselected class. These minima
+need not occur in the same representative: each is still a lower bound, and
+omitting further descendants only weakens it. Strict dominance by a feasible
+archive entry can therefore discard a branch without losing nondominated
+vectors or equal-vector witnesses. Inclusive upper bounds prune only when the
+lower bound already violates a constraint.
+
+`Yolk.Internal.Pareto` operates on immutable sort-erased choices.
+`Yolk.Extract.Pareto` validates dimensions and limits, freezes the live graph,
+and reconstructs each candidate through `Yolk.Dag`'s checked constructor.
+The constructor checks visibility, selected-class membership, sorts and cycles.
+The public result cannot be edited to invalidate its vector/evidence fields.
+A snapshot selection asserts no semantic fact beyond the graph's equalities;
+proof-producing rewrite explanations remain a separate outstanding feature.
+
+The archive retains at most the requested witnesses per vector. Dropping tied
+witnesses does not lose vector coverage. When adding an incomparable vector
+exceeds the archive limit, the extractor keeps a deterministic bounded subset
+and stops as `Approximate/ArchiveBudget`. It does not continue with unsound
+claims that discarded witnesses still participate in dominance tests.
+An expansion stop returns at most one componentwise lower envelope of pending
+branches. If every pending lower bound is weakly dominated, vector coverage
+is complete despite incomplete witness enumeration.
+
+Tests compare the full vector set with an independent exhaustive oracle that
+selects representatives for every class before DFS checking only the reachable
+closure. Random cases include cyclic choices, sharing, duplicate roots,
+zero costs and hard bounds. Returned witnesses are independently rescored and
+checked for root mapping, membership, acyclicity and one selected node per
+class. Both backends run the same cases. This supports extraction-model claims;
+it does not establish physical circuit quality or complete Yolk v1 delivery.

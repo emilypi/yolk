@@ -20,17 +20,43 @@
 -- before apply starts. This is a backtracking baseline, not a relational VM.
 module Yolk.Rewrite
   ( Pattern, var, node, Rewrite, RuleError (..), rewrite
+  , _Var, _Node, rewriteName
   , Limits (..), defaultLimits, StopReason (..), RunResult (..), run
   ) where
 
+import Control.Lens (Lens', Prism', lens, prism')
 import Control.Monad (foldM)
-import Control.Monad.Trans.State.Strict (gets)
 import Data.HKD (FFoldable (..), FTraversable (..))
 import qualified Data.Map.Strict as M
 import Type.Reflection (SomeTypeRep (..), TypeRep, Typeable, eqTypeRep, typeRep, (:~~:) (HRefl))
 import Yolk.Backend (Backend)
 import Yolk.Internal.Graph
 import Yolk.Internal.Types
+
+-- | A sort-preserving pattern. Constructors and runtime witnesses remain
+-- private; the prisms below expose only safe construction and inspection.
+data Pattern l s where
+  PVar :: !(TypeRep s) -> !String -> Pattern l s
+  PNode :: !(TypeRep s) -> !(l s (Pattern l)) -> Pattern l s
+
+-- | A rule whose variables have passed 'rewrite' validation. Renaming a
+-- rule is safe; changing either body requires validating a new rule.
+data Rewrite l where
+  Rewrite :: !String -> !(Pattern l s) -> !(Pattern l s) -> Rewrite l
+
+_Var :: Typeable s => Prism' (Pattern l s) String
+_Var = prism' (PVar typeRep) $ \case
+  PVar _ name -> Just name
+  PNode {} -> Nothing
+
+_Node :: Typeable s => Prism' (Pattern l s) (l s (Pattern l))
+_Node = prism' (PNode typeRep) $ \case
+  PVar {} -> Nothing
+  PNode _ n -> Just n
+
+rewriteName :: Lens' (Rewrite l) String
+rewriteName = lens (\(Rewrite name _ _) -> name)
+  (\(Rewrite _ lhs rhs) name -> Rewrite name lhs rhs)
 
 -- | A named variable at a known sort. Repeated names impose equality.
 var :: Typeable s => String -> Pattern l s
@@ -83,7 +109,7 @@ match snap pat requested env = case snapshotFind requested snap of
   Just c -> case pat of
     PVar rep name -> case M.lookup name env of
       Nothing -> [M.insert name (SomeId c) env]
-      Just (SomeId old@(ClassId actual _)) -> case eqTypeRep rep actual of
+      Just (SomeId old) -> case eqTypeRep rep (classIdRep old) of
         Just HRefl -> [env | snapshotFind old snap == Just c]
         Nothing -> []
     PNode _ p -> concatMap (matchNode p) (snapshotNodes c snap)
@@ -95,15 +121,15 @@ match snap pat requested env = case snapshotFind requested snap of
       where
         pats = ffoldMap (\x -> [SomePattern x]) p
         kids = ffoldMap (\x -> [SomeId x]) n
-    matchChild bindings (SomePattern p, SomeId c@(ClassId rep _)) =
-      case eqTypeRep (patternRep p) rep of
+    matchChild bindings (SomePattern p, SomeId c) =
+      case eqTypeRep (patternRep p) (classIdRep c) of
         Just HRefl -> match snap p c bindings
         Nothing -> []
 
 instantiate :: (Backend b m, Language l) => Substitution r -> Pattern l s -> EGraphT b r l m (ClassId r s)
 instantiate env (PVar rep name) = case M.lookup name env of
   Nothing -> throwGraph (InvalidBinding name)
-  Just (SomeId c@(ClassId actual _)) -> case eqTypeRep rep actual of
+  Just (SomeId c) -> case eqTypeRep rep (classIdRep c) of
     Just HRefl -> findClass c
     Nothing -> throwGraph (InvalidBinding name)
 instantiate env (PNode rep n) = ftraverse (instantiate env) n >>= addAt rep
@@ -157,10 +183,10 @@ run limits rules
         let (work, excess) = splitAt (matchLimit limits) (concatMap (applicationsFor snap) rules)
         if not (null excess) then finish MatchLimit n applied
         else do
-          version <- EGraphT (gets graphVersion)
+          version <- graphRevision
           (performed, exceeded) <- applyBatch 0 work
           rebuild
-          version' <- EGraphT (gets graphVersion)
+          version' <- graphRevision
           if exceeded then finish NodeLimit (n + 1) (applied + performed)
           else if version == version' then finish Saturated (n + 1) (applied + performed)
           else loop (n + 1) (applied + performed)

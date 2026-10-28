@@ -34,31 +34,15 @@ module Yolk.Optics
 
 import Control.Lens (Getter, Iso', Lens', Prism', iso, lens, prism', to)
 import Data.Word (Word64)
-import Type.Reflection (Typeable, typeRep)
+import Type.Reflection (Typeable)
 import qualified Yolk.Extract.Dag as D
 import Yolk.Internal.Types
+import Yolk.Rewrite (_Var, _Node, rewriteName)
 import qualified Yolk.Rewrite as R
 
 -- | One layer of a finite term, at the same sort in both directions.
 _Term :: Typeable s => Iso' (Term l s) (l s (Term l))
 _Term = iso (\(Term n) -> n) Term
-
--- | Construct, inspect, or rename a pattern variable at its existing sort.
-_Var :: Typeable s => Prism' (Pattern l s) String
-_Var = prism' (PVar typeRep) $ \case
-  PVar _ name -> Just name
-  PNode {} -> Nothing
-
--- | One constructor layer of a pattern, preserving its result sort.
-_Node :: Typeable s => Prism' (Pattern l s) (l s (Pattern l))
-_Node = prism' (PNode typeRep) $ \case
-  PVar {} -> Nothing
-  PNode _ n -> Just n
-
--- | Renaming a rule leaves its validated bindings and bodies intact.
-rewriteName :: Lens' (Rewrite l) String
-rewriteName = lens (\(Rewrite name _ _) -> name)
-  (\(Rewrite _ lhs rhs) name -> Rewrite name lhs rhs)
 
 iterationLimit :: Lens' R.Limits Int
 iterationLimit = lens R.iterationLimit (\s a -> s { R.iterationLimit = a })
