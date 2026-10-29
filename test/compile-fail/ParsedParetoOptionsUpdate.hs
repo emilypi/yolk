@@ -7,6 +7,12 @@
 -- Stability    : experimental
 -- Portability  : non-portable (GHC extensions)
 module ParsedParetoOptionsUpdate where
-import Yolk.Extract.Pareto (ParsedParetoOptions, parsedParetoOptions, defaultParetoOptions)
+
+import Yolk.Extract.Pareto
+  ( ParsedParetoOptions
+  , defaultParetoOptions
+  , parsedParetoOptions
+  )
+
 forge :: ParsedParetoOptions -> ParsedParetoOptions
 forge value = value {parsedParetoOptions = defaultParetoOptions 0}

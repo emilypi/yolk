@@ -276,6 +276,22 @@ restore it. When a hidden and visible occurrence collide, visibility is
 retained. An analysis may prune again after merging. The matcher and
 extractor enumerate visible nodes; `lookupNode` probes retained identity.
 
+## Formatting
+
+Authored code, comments and Markdown code fences are limited to 90 columns.
+Run `sh test/check-width.sh` to check the hard limit. Generated benchmark data
+and the canonical baseline report retain their original bytes.
+`fourmolu.yaml` configures the formatter, whose column limit is only a soft
+limit; preserve manual wrapping and Haskell string gaps where needed.
+
+The bundled Fourmolu 0.12 parser predates GHC2024. With that version, use
+`--no-cabal -o -XGHC2021` plus the source's extensions. Its GHC2024 additions
+here are `DataKinds`, `LambdaCase`, `GADTs`, `DerivingStrategies`,
+`ExplicitNamespaces` and `DisambiguateRecordFields`. For `Backend.hs`, format
+a temporary copy with its explicit `GHC2024` pragma changed to `GHC2021`,
+then restore the original pragma. Keep function-specific compiler pragmas
+after their complete definitions. Recheck the hard limit after formatting.
+
 ## Benchmarks and regressions
 
 `cabal bench yolk-bench` runs deterministic interning, rebuilding, rewriting,
@@ -286,7 +302,8 @@ the extracted witnesses; every invocation starts from a fresh graph.
 
 ```sh
 cabal bench yolk-bench --offline \
-  --benchmark-options='--baseline bench/baseline.csv --fail-if-slower 10 --csv bench/current.csv --stdev 2 --timeout 3s'
+  --benchmark-options='--baseline bench/baseline.csv --fail-if-slower 10 '\
+'--csv bench/current.csv --stdev 2 --timeout 3s'
 cabal run yolk-bench-report --offline -- bench/baseline.csv bench/current.csv
 ```
 

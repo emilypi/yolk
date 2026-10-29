@@ -7,7 +7,9 @@
 -- Stability    : experimental
 -- Portability  : non-portable (GHC extensions)
 module InternalClassConstructor where
+
 import Type.Reflection (TypeRep)
 import Yolk.Internal.Graph (ClassId)
+
 forge :: TypeRep s -> ClassId r s
 forge rep = ClassId rep 0

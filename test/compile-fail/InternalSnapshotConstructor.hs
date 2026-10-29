@@ -7,6 +7,8 @@
 -- Stability    : experimental
 -- Portability  : non-portable (GHC extensions)
 module InternalSnapshotConstructor where
+
 import Yolk.Internal.Graph (Snapshot)
+
 forge :: Snapshot r l
 forge = Snapshot mempty mempty

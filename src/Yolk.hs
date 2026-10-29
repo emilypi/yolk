@@ -14,8 +14,15 @@
 -- graph identities, add terms, run validated rewrites, and extract a finite
 -- result. The example executable demonstrates a two-sort language.
 module Yolk
-  ( module Yolk.Language, module Yolk.EGraph, module Yolk.Rewrite
-  , module Yolk.Extract, module Yolk.Extract.Dag, module Yolk.Extract.Pareto, Mutable, Persistent, Backend
+  ( module Yolk.Language
+  , module Yolk.EGraph
+  , module Yolk.Rewrite
+  , module Yolk.Extract
+  , module Yolk.Extract.Dag
+  , module Yolk.Extract.Pareto
+  , Mutable
+  , Persistent
+  , Backend
   ) where
 
 import Yolk.Backend (Backend, Mutable, Persistent)

@@ -7,7 +7,6 @@
 -- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
 -- Stability    : experimental
 -- Portability  : non-portable (GHC extensions)
---
 module ParetoCoerceSort where
 
 import Data.Coerce (coerce)

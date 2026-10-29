@@ -7,7 +7,6 @@
 -- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
 -- Stability    : experimental
 -- Portability  : non-portable (GHC extensions)
---
 module Main (main) where
 
 import BenchReport (compareCsv, renderReport)
@@ -33,5 +32,6 @@ readCsv path = do
   -- Strict IO keeps delayed file/decoding errors inside the exception handler.
   result <- try (readFile' path) :: IO (Either IOException String)
   case result of
-    Left err -> die ("yolk-bench-report: cannot read " ++ show path ++ ": " ++ displayException err)
+    Left err -> die ("yolk-bench-report: cannot read \
+      \" ++ show path ++ ": " ++ displayException err)
     Right contents -> pure contents

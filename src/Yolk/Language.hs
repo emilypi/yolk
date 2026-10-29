@@ -13,13 +13,18 @@
 -- Many-sorted higher-kinded languages and finite terms.
 -- Traversal uses the @hkd@ package's 'FTraversable' interface.
 module Yolk.Language
-  ( Language (..), ClassId, Term, term, unTerm, foldTerm
+  ( Language (..)
+  , ClassId
+  , Term
+  , term
+  , unTerm
+  , foldTerm
   ) where
 
 import Data.HKD (FFunctor (..))
 import Type.Reflection (Typeable)
-import Yolk.Internal.Types
 import Yolk.Internal.Graph (ClassId)
+import Yolk.Internal.Types
 
 -- | Construct a term at its known result sort.
 term :: Typeable s => l s (Term l) -> Term l s

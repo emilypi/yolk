@@ -12,17 +12,23 @@
 -- many-sorted terms; all graph operations go through the public Yolk API.
 module Main (main) where
 
-import Control.Lens ((&), (.~), (^.), review)
+import Control.Lens (review, (&), (.~), (^.))
 import Control.Monad (void)
 import Data.Functor.Const (Const (..))
-import Data.HKD (FFoldable (..), FFunctor (..), FTraversable (..), ffoldMapDefault, ffmapDefault)
+import Data.HKD
+  ( FFoldable (..)
+  , FFunctor (..)
+  , FTraversable (..)
+  , ffmapDefault
+  , ffoldMapDefault
+  )
+import Data.IORef (atomicModifyIORef', newIORef)
 import Data.Kind (Type)
-import Data.IORef (newIORef, atomicModifyIORef')
 import Data.Word (Word64)
 import Numeric.Natural (Natural)
 import System.Exit (die)
 import Yolk
-import qualified Yolk.Optics as O
+import Yolk.Optics qualified as O
 
 data Sort = Number | Boolean
 
@@ -79,16 +85,17 @@ expression :: Term Math 'Number
 expression = term (If condition arithmetic (term (Lit 99)))
 
 rules :: Either RuleError [Rewrite Math]
-rules = sequence
-  [ rewrite "add-zero" (node (Add x (node (Lit 0)))) x
-  , rewrite "multiply-one" (node (Mul x (node (Lit 1)))) x
-  , rewrite "equal-reflexive" (node (Equal x x)) (node (BoolLit True))
-  , rewrite "if-true" (node (If (node (BoolLit True)) x y)) x
-  ]
-  where
-    x, y :: Pattern Math 'Number
-    x = review O._Var "x"
-    y = review O._Var "y"
+rules =
+  sequence
+    [ rewrite "add-zero" (node (Add x (node (Lit 0)))) x
+    , rewrite "multiply-one" (node (Mul x (node (Lit 1)))) x
+    , rewrite "equal-reflexive" (node (Equal x x)) (node (BoolLit True))
+    , rewrite "if-true" (node (If (node (BoolLit True)) x y)) x
+    ]
+ where
+  x, y :: Pattern Math 'Number
+  x = review O._Var "x"
+  y = review O._Var "y"
 
 data Simplification = Simplification
   { reason :: StopReason
@@ -104,11 +111,12 @@ simplify rewrites = do
   result <- run limits rewrites
   numeric <- extract numericRoot
   boolean <- extract booleanRoot
-  pure Simplification
-    { reason = result ^. O.stopReason
-    , numericResult = fmap (\(cost, tree) -> (cost, pretty tree)) numeric
-    , booleanResult = fmap (\(cost, tree) -> (cost, pretty tree)) boolean
-    }
+  pure
+    Simplification
+      { reason = result ^. O.stopReason
+      , numericResult = fmap (\(cost, tree) -> (cost, pretty tree)) numeric
+      , booleanResult = fmap (\(cost, tree) -> (cost, pretty tree)) boolean
+      }
 
 main :: IO ()
 main = case rules of
@@ -137,16 +145,24 @@ display backend = \case
     printResult "Number" (numericResult result)
     printResult "Boolean" (booleanResult result)
     if reason result == Saturated
-        && numericResult result == Just (1, "7")
-        && booleanResult result == Just (1, "true")
+      && numericResult result == Just (1, "7")
+      && booleanResult result == Just (1, "true")
       then pure ()
       else die (backend ++ " did not produce the expected simplification")
-  where
-    printResult :: String -> Maybe (Int, String) -> IO ()
-    printResult label = \case
-      Nothing -> die (backend ++ ": no finite " ++ label ++ " term")
-      Just (cost, rendered) ->
-        putStrLn ("  " ++ label ++ " result: " ++ rendered ++ " (AST size " ++ show cost ++ ")")
+ where
+  printResult :: String -> Maybe (Int, String) -> IO ()
+  printResult label = \case
+    Nothing -> die (backend ++ ": no finite " ++ label ++ " term")
+    Just (cost, rendered) ->
+      putStrLn
+        ( "  "
+            ++ label
+            ++ " result: "
+            ++ rendered
+            ++ " (AST size "
+            ++ show cost
+            ++ ")"
+        )
 
 -- A payload-aware operator weight could inspect Lit's value as well. Word64
 -- weights are nonnegative; weightedSize adds them with saturating arithmetic.
@@ -160,20 +176,23 @@ preferAddition :: TreeCost Math (Word64, Word64)
 preferAddition n =
   let multiplications = weightedSize multiplication (ffmap (Const . fst . getConst) n)
       size = astSize (ffmap (Const . snd . getConst) n)
-  -- When the primary objective saturates, absorb the secondary objective too.
-  -- Otherwise overflow could reverse the lexicographic ordering of children.
-  in if multiplications == maxBound then (maxBound, maxBound) else (multiplications, size)
-  where
-    multiplication :: Math s f -> Word64
-    multiplication Mul {} = 1
-    multiplication _ = 0
+   in -- When the primary objective saturates, absorb the secondary objective too.
+      -- Otherwise overflow could reverse the lexicographic ordering of children.
+      if multiplications == maxBound
+        then (maxBound, maxBound)
+        else (multiplications, size)
+ where
+  multiplication :: Math s f -> Word64
+  multiplication Mul {} = 1
+  multiplication _ = 0
 
 data Choices = Choices
   { smallest :: Maybe (Word64, String)
   , cheapest :: Maybe (Word64, String)
   , shallowest :: Maybe (Word64, String)
   , lexicographic :: Maybe ((Word64, Word64), String)
-  } deriving (Eq, Show)
+  }
+  deriving (Eq, Show)
 
 minimize :: Backend b m => EGraphT b r Math m Choices
 minimize = do
@@ -191,14 +210,23 @@ minimize = do
   -- Equal expressions with opposing size/depth preferences: the conditional
   -- has more AST nodes, but its longest path is shorter.
   deep <- addTerm (term (Add one (term (Add one (term (Add one one))))))
-  shallow <- addTerm (term (If (term (Equal one one))
-    (term (Add two two)) (term (Add two two))))
+  shallow <-
+    addTerm
+      ( term
+          ( If
+              (term (Equal one one))
+              (term (Add two two))
+              (term (Add two two))
+          )
+      )
   void (union deep shallow)
   byDepth <- extractWith astDepth deep
-  pure (Choices (render bySize) (render byWeight) (render byDepth) (render byPreference))
-  where
-    render :: Maybe (c, Term Math s) -> Maybe (c, String)
-    render = fmap (\(cost, tree) -> (cost, pretty tree))
+  pure
+    ( Choices (render bySize) (render byWeight) (render byDepth) (render byPreference)
+    )
+ where
+  render :: Maybe (c, Term Math s) -> Maybe (c, String)
+  render = fmap (\(cost, tree) -> (cost, pretty tree))
 
 displayChoices :: String -> Either EGraphError Choices -> IO ()
 displayChoices backend = \case
@@ -209,10 +237,12 @@ displayChoices backend = \case
     putStrLn ("  Weighted operations:  " ++ show (cheapest actual))
     putStrLn ("  AST depth:            " ++ show (shallowest actual))
     putStrLn ("  (multiplications, size): " ++ show (lexicographic actual))
-    if actual == expected then pure ()
+    if actual == expected
+      then pure ()
       else die (backend ++ " did not produce the expected cost-model choices")
-  where
-    expected = Choices
+ where
+  expected =
+    Choices
       (Just (3, "(2 * 3)"))
       (Just (5, "(2 + (2 + 2))"))
       (Just (3, "if (1 == 1) then (2 + 2) else (2 + 2)"))
@@ -246,7 +276,8 @@ minimizeDag = do
 displayDagChoices :: String -> Either EGraphError DagChoices -> IO ()
 displayDagChoices backend = \case
   Left err -> die (backend ++ " DAG extraction failed: " ++ show err)
-  Right choices -> case (sharedChoice choices, weightedChoice choices, limitedChoice choices) of
+  Right choices -> case
+    (sharedChoice choices, weightedChoice choices, limitedChoice choices) of
     (Just best, Just weighted, Just limited) -> do
       putStrLn ("\n" ++ backend ++ " backend")
       putStrLn ("  Tree optimum: " ++ show (treeChoice choices))
@@ -264,23 +295,37 @@ displayDagChoices backend = \case
       Const name <- foldDagM emit (dag best)
       putStrLn ("    result = " ++ name)
       if treeChoice choices == Just (5, "(1 + (2 + 1))")
-          && dagCost best == 3 && dagSize (dag best) == 3
-          && optimality best == Optimal && lowerBound best == 3
-          && pretty (dagToTerm (dag best)) == "((1 + 1) * (1 + 1))"
-          && dagCost weighted == 4 && optimality weighted == Optimal
-          && pretty (dagToTerm (dag weighted)) == "(1 + (2 + 1))"
-          && optimality limited == Unproven && expansions limited == 0
-          && lowerBound limited <= 3 && dagCost limited >= 3
+        && dagCost best == 3
+        && dagSize (dag best) == 3
+        && optimality best == Optimal
+        && lowerBound best == 3
+        && pretty (dagToTerm (dag best)) == "((1 + 1) * (1 + 1))"
+        && dagCost weighted == 4
+        && optimality weighted == Optimal
+        && pretty (dagToTerm (dag weighted)) == "(1 + (2 + 1))"
+        && optimality limited == Unproven
+        && expansions limited == 0
+        && lowerBound limited <= 3
+        && dagCost limited >= 3
         then pure ()
         else die (backend ++ " did not produce the expected DAG choices")
     _ -> die (backend ++ " unexpectedly has no finite DAG")
-  where
-    displayCertificate label result = putStrLn
-      ("  " ++ label ++ ": cost " ++ show (dagCost result)
-        ++ ", lower bound " ++ show (lowerBound result)
-        ++ ", " ++ show (optimality result)
-        ++ ", expansions " ++ show (expansions result)
-        ++ ", " ++ pretty (dagToTerm (dag result)))
+ where
+  displayCertificate label result =
+    putStrLn
+      ( "  "
+          ++ label
+          ++ ": cost "
+          ++ show (dagCost result)
+          ++ ", lower bound "
+          ++ show (lowerBound result)
+          ++ ", "
+          ++ show (optimality result)
+          ++ ", expansions "
+          ++ show (expansions result)
+          ++ ", "
+          ++ pretty (dagToTerm (dag result))
+      )
 
 renderLayer :: Math s (Const String) -> String
 renderLayer = \case
@@ -294,8 +339,9 @@ renderLayer = \case
 -- These three expressions all equal six. The costs are deliberately chosen
 -- to exhibit a nondominated point unsupported by any positive weighted sum;
 -- they are illustrative extraction-model units, not hardware measurements.
-paretoExample :: Backend b m
-  => EGraphT b r Math m (Either ParetoError (ParetoCoverage, [([Natural], String)]))
+paretoExample ::
+  Backend b m =>
+  EGraphT b r Math m (Either ParetoError (ParetoCoverage, [([Natural], String)]))
 paretoExample = do
   literal <- add (Lit 6)
   addition <- addTerm (term (Add (term (Lit 3)) (term (Lit 3))))
@@ -304,18 +350,31 @@ paretoExample = do
   void (union literal multiplication)
   let options = defaultParetoOptions 2 & O.paretoExpansionLimit .~ Nothing
   result <- extractPareto options weight literal
-  pure $ fmap (\r -> (paretoCoverage r,
-    [(candidateCost c, pretty (dagToTerm (candidateValue c))) | c <- paretoCandidates r])) result
-  where
-    weight :: Math s f -> [Natural]
-    weight (Lit 6) = [1, 6]
-    weight Add {} = [4, 4]
-    weight Mul {} = [6, 1]
-    weight _ = [0, 0]
+  pure $
+    fmap
+      ( \r ->
+          ( paretoCoverage r
+          , [ (candidateCost c, pretty (dagToTerm (candidateValue c)))
+            | c <- paretoCandidates r
+            ]
+          )
+      )
+      result
+ where
+  weight :: Math s f -> [Natural]
+  weight (Lit 6) = [1, 6]
+  weight Add {} = [4, 4]
+  weight Mul {} = [6, 1]
+  weight _ = [0, 0]
 
-displayPareto :: String -> Either EGraphError (Either ParetoError (ParetoCoverage, [([Natural], String)])) -> IO ()
+displayPareto ::
+  String ->
+  Either EGraphError (Either ParetoError (ParetoCoverage, [([Natural], String)])) ->
+  IO ()
 displayPareto backend result = case result of
   Right (Right (Complete, choices)) | map fst choices == [[1, 6], [4, 4], [6, 1]] -> do
     putStrLn (backend ++ ": complete model frontier")
-    mapM_ (\(cost, expression') -> putStrLn ("  " ++ show cost ++ "  " ++ expression')) choices
+    mapM_
+      (\(cost, expression') -> putStrLn ("  " ++ show cost ++ "  " ++ expression'))
+      choices
   _ -> die (backend ++ " Pareto demonstration failed: " ++ show result)

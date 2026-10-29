@@ -42,7 +42,8 @@ cabal bench yolk-bench --offline \
 
 # Use a comparable local baseline and fail on a measurable slowdown over 10%.
 cabal bench yolk-bench --offline \
-  --benchmark-options='--baseline bench/baseline.csv --fail-if-slower 10 --csv bench/current.csv --stdev 2 --timeout 3s'
+  --benchmark-options='--baseline bench/baseline.csv --fail-if-slower 10 '\
+'--csv bench/current.csv --stdev 2 --timeout 3s'
 
 # Validate matching benchmark names and summarize runtime ratios.
 cabal run yolk-bench-report --offline -- bench/baseline.csv bench/current.csv

@@ -7,15 +7,14 @@
 -- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
 -- Stability    : experimental
 -- Portability  : non-portable (GHC extensions)
---
 module Main (main) where
 
+import BenchVectors
 import Control.DeepSeq (force)
 import Control.Exception (evaluate)
 import Control.Monad (forM_)
 import System.Exit (die)
 import Test.Tasty.Bench (bench, bgroup, defaultMain, nf)
-import BenchVectors
 
 main :: IO ()
 main = do

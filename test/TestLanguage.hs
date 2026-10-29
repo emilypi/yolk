@@ -23,10 +23,27 @@ module TestLanguage
   , arithmeticRules
   ) where
 
-import Data.HKD (FFoldable (..), FFunctor (..), FTraversable (..), ffoldMapDefault, ffmapDefault)
+import Data.HKD
+  ( FFoldable (..)
+  , FFunctor (..)
+  , FTraversable (..)
+  , ffmapDefault
+  , ffoldMapDefault
+  )
 import Data.Kind (Type)
 import Data.Monoid (Sum (..))
-import Yolk (Language (..), Pattern, Rewrite, RuleError, Term, node, rewrite, term, unTerm, var)
+import Yolk
+  ( Language (..)
+  , Pattern
+  , Rewrite
+  , RuleError
+  , Term
+  , node
+  , rewrite
+  , term
+  , unTerm
+  , var
+  )
 
 data Sort = Number | Boolean
 
@@ -80,7 +97,8 @@ times a b = term (Mul a b)
 equal :: Term Math 'Number -> Term Math 'Number -> Term Math 'Boolean
 equal a b = term (Equal a b)
 
-ifNumber :: Term Math 'Boolean -> Term Math 'Number -> Term Math 'Number -> Term Math 'Number
+ifNumber ::
+  Term Math 'Boolean -> Term Math 'Number -> Term Math 'Number -> Term Math 'Number
 ifNumber c t e = term (If c t e)
 
 pretty :: Term Math s -> String
@@ -97,10 +115,11 @@ termSize :: Term Math s -> Int
 termSize expression = 1 + getSum (ffoldMap (Sum . termSize) (unTerm expression))
 
 arithmeticRules :: Either RuleError [Rewrite Math]
-arithmeticRules = sequence
-  [ rewrite "add-zero" (node (Add x (node (Lit 0)))) x
-  , rewrite "multiply-one" (node (Mul x (node (Lit 1)))) x
-  ]
-  where
-    x :: Pattern Math 'Number
-    x = var "x"
+arithmeticRules =
+  sequence
+    [ rewrite "add-zero" (node (Add x (node (Lit 0)))) x
+    , rewrite "multiply-one" (node (Mul x (node (Lit 1)))) x
+    ]
+ where
+  x :: Pattern Math 'Number
+  x = var "x"

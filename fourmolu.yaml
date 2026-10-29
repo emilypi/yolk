@@ -1,0 +1,7 @@
+indentation: 2
+column-limit: 90
+haddock-style: single-line
+import-export-style: leading
+record-brace-space: true
+single-constraint-parens: auto
+respectful: true

@@ -9,24 +9,26 @@
 -- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
 -- Stability    : experimental
 -- Portability  : non-portable (GHC extensions)
---
 module TestSupport (Program (..), both, assertRight, observeProperty) where
 
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (Assertion, assertEqual, assertFailure, testCase)
-import qualified Test.Tasty.QuickCheck as QC
+import Test.Tasty.QuickCheck qualified as QC
 import TestLanguage (Math)
 import Yolk
 
 -- Interpret the same public graph program with both actual library backends.
-newtype Program a = Program
-  (forall b r m. Backend b m => EGraphT b r Math m a)
+newtype Program a
+  = Program
+      (forall b r m. Backend b m => EGraphT b r Math m a)
 
 both :: (Eq a, Show a) => String -> a -> Program a -> TestTree
-both label expected (Program action) = testGroup label
-  [ testCase "mutable" $ assertRight expected (runMutable action)
-  , testCase "persistent" $ assertRight expected (runPersistent action)
-  ]
+both label expected (Program action) =
+  testGroup
+    label
+    [ testCase "mutable" $ assertRight expected (runMutable action)
+    , testCase "persistent" $ assertRight expected (runPersistent action)
+    ]
 
 assertRight :: (Eq a, Show a) => a -> Either EGraphError a -> Assertion
 assertRight expected = \case

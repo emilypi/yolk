@@ -90,11 +90,12 @@ class Monad m => Backend (b :: Type) m where
   ufCount :: UnionFind b m -> Int
 
 instance PrimMonad m => Backend Mutable m where
-  data UnionFind Mutable m = MutableUF
-    {-# UNPACK #-} !Int
-    {-# UNPACK #-} !Int
-    !(MutablePrimArray (PrimState m) Int)
-    !(MutablePrimArray (PrimState m) Int)
+  data UnionFind Mutable m
+    = MutableUF
+        {-# UNPACK #-} !Int
+        {-# UNPACK #-} !Int
+        !(MutablePrimArray (PrimState m) Int)
+        !(MutablePrimArray (PrimState m) Int)
 
   ufEmpty = do
     parents <- newPrimArray 0
@@ -132,10 +133,11 @@ instance PrimMonad m => Backend Mutable m where
   {-# INLINABLE ufCount #-}
 
 instance Monad m => Backend Persistent m where
-  data UnionFind Persistent m = PersistentUF
-    {-# UNPACK #-} !Int
-    !(IntMap Int)
-    !(IntMap Int)
+  data UnionFind Persistent m
+    = PersistentUF
+        {-# UNPACK #-} !Int
+        !(IntMap Int)
+        !(IntMap Int)
 
   ufEmpty = pure (PersistentUF 0 IntMap.empty IntMap.empty)
   {-# INLINABLE ufEmpty #-}
@@ -144,27 +146,27 @@ instance Monad m => Backend Persistent m where
     let !count' = incrementCount maxBound count
         !parents' = IntMap.insert count count parents
         !sizes' = IntMap.insert count 1 sizes
-    in pure (count, PersistentUF count' parents' sizes')
+     in pure (count, PersistentUF count' parents' sizes')
   {-# INLINABLE ufFresh #-}
 
   ufFind (PersistentUF _ parents _) node =
     let !root = findPersistent parents node
-    in pure root
+     in pure root
   {-# INLINABLE ufFind #-}
 
   ufUnion store@(PersistentUF count parents sizes) left right =
     let !leftRoot = findPersistent parents left
         !rightRoot = findPersistent parents right
-    in if leftRoot == rightRoot
-      then pure (False, store)
-      else
-        let !leftSize = sizes IntMap.! leftRoot
-            !rightSize = sizes IntMap.! rightRoot
-            (!winner, !loser) = linkOrder leftRoot leftSize rightRoot rightSize
-            !mergedSize = leftSize + rightSize
-            !parents' = IntMap.insert loser winner parents
-            !sizes' = IntMap.insert winner mergedSize sizes
-        in pure (True, PersistentUF count parents' sizes')
+     in if leftRoot == rightRoot
+          then pure (False, store)
+          else
+            let !leftSize = sizes IntMap.! leftRoot
+                !rightSize = sizes IntMap.! rightRoot
+                (!winner, !loser) = linkOrder leftRoot leftSize rightRoot rightSize
+                !mergedSize = leftSize + rightSize
+                !parents' = IntMap.insert loser winner parents
+                !sizes' = IntMap.insert winner mergedSize sizes
+             in pure (True, PersistentUF count parents' sizes')
   {-# INLINABLE ufUnion #-}
 
   ufCount (PersistentUF count _ _) = count
@@ -181,18 +183,18 @@ linkOrder leftRoot leftSize rightRoot rightSize
 
 findMutable :: PrimMonad m => MutablePrimArray (PrimState m) Int -> Int -> m Int
 findMutable parents = go
-  where
-    go !node = do
-      parent <- readPrimArray parents node
-      if parent == node then pure node else go parent
+ where
+  go !node = do
+    parent <- readPrimArray parents node
+    if parent == node then pure node else go parent
 {-# INLINABLE findMutable #-}
 
 findPersistent :: IntMap Int -> Int -> Int
 findPersistent parents = go
-  where
-    go !node =
-      let !parent = parents IntMap.! node
-      in if parent == node then node else go parent
+ where
+  go !node =
+    let !parent = parents IntMap.! node
+     in if parent == node then node else go parent
 {-# INLINABLE findPersistent #-}
 
 -- primitive multiplies element count by element size when allocating.

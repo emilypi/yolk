@@ -15,7 +15,10 @@
 -- Shared language and term representations. Graph identities and validated
 -- rewrites are defined by their own domains, with opaque constructors.
 module Yolk.Internal.Types
-  ( Language (..), Term (..), erase, EGraphError (..)
+  ( Language (..)
+  , Term (..)
+  , erase
+  , EGraphError (..)
   ) where
 
 import Data.Functor.Const (Const (..))
@@ -50,5 +53,6 @@ data EGraphError
   | InvalidLimits
   | InvalidBinding !String
   | CostOverflow
-  | InvalidExtraction -- ^ Internal inconsistency while reconstructing a typed DAG.
+  | -- | Internal inconsistency while reconstructing a typed DAG.
+    InvalidExtraction
   deriving (Eq, Show)

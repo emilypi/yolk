@@ -7,6 +7,8 @@
 -- Stability    : experimental
 -- Portability  : non-portable (GHC extensions)
 module InternalSnapshotUpdate where
+
 import Yolk.Internal.Graph (Snapshot, snapshotRows)
+
 forge :: Snapshot r l -> Snapshot r l
-forge snapshot = snapshot { snapshotRows = mempty }
+forge snapshot = snapshot {snapshotRows = mempty}

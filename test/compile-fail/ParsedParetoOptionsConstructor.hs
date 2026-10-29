@@ -7,6 +7,8 @@
 -- Stability    : experimental
 -- Portability  : non-portable (GHC extensions)
 module ParsedParetoOptionsConstructor where
+
 import Yolk.Extract.Pareto (ParsedParetoOptions)
+
 forge :: ParsedParetoOptions
 forge = ParsedParetoOptions 0 Nothing Nothing 0 0 0 0 0

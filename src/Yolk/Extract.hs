@@ -17,13 +17,18 @@
 -- Cycles without a finite visible derivation yield 'Nothing'. This does
 -- not perform DAG extraction; see "Yolk.Extract.Dag" for that separate path.
 module Yolk.Extract
-  ( TreeCost, extract, extractWith
-  , astSize, astDepth, weightedSize, saturatingAdd
+  ( TreeCost
+  , extract
+  , extractWith
+  , astSize
+  , astDepth
+  , weightedSize
+  , saturatingAdd
   ) where
 
 import Data.Functor.Const (Const (..))
-import Data.HKD (FFunctor (..), FFoldable (..), FTraversable (..))
-import qualified Data.IntMap.Strict as IM
+import Data.HKD (FFoldable (..), FFunctor (..), FTraversable (..))
+import Data.IntMap.Strict qualified as IM
 import Data.Semigroup (Max (..))
 import Data.Word (Word64)
 import Type.Reflection (TypeRep, eqTypeRep, withTypeable, (:~~:) (HRefl))
@@ -67,7 +72,7 @@ saturatingAdd a b
   | otherwise = a + b
 {-# INLINE saturatingAdd #-}
 
-newtype Total = Total { getTotal :: Word64 }
+newtype Total = Total {getTotal :: Word64}
 
 instance Semigroup Total where
   Total a <> Total b = Total (saturatingAdd a b)
@@ -97,7 +102,8 @@ astDepth n = saturatingAdd 1 (getMax (ffoldMap (Max . getConst) n))
 -- This compatibility wrapper uses 'astSize' and reports 'CostOverflow' when
 -- the result exceeds @maxBound :: Int@. Use @extractWith astSize@ to retain
 -- the full 'Word64' range.
-extract :: (Backend b m, Language l) => ClassId r s -> EGraphT b r l m (Maybe (Int, Term l s))
+extract ::
+  (Backend b m, Language l) => ClassId r s -> EGraphT b r l m (Maybe (Int, Term l s))
 extract requested = do
   result <- extractWith astSize requested
   case result of
@@ -115,8 +121,11 @@ extract requested = do
 -- saturation defined by that model. Equal costs keep the first finite witness
 -- encountered; no secondary objective or insertion-order independence of
 -- tied /terms/ is promised. Sharing is counted by occurrence, not by DAG node.
-extractWith :: (Backend b m, Language l, Ord c)
-            => TreeCost l c -> ClassId r s -> EGraphT b r l m (Maybe (c, Term l s))
+extractWith ::
+  (Backend b m, Language l, Ord c) =>
+  TreeCost l c ->
+  ClassId r s ->
+  EGraphT b r l m (Maybe (c, Term l s))
 extractWith model requested = do
   root <- findClass requested
   snap <- freeze
@@ -135,22 +144,27 @@ fetch snap table c = do
     Just HRefl -> Just (Costed cost tree)
     Nothing -> Nothing
 
-solve :: (Language l, Ord c)
-      => TreeCost l c -> Snapshot r l -> IM.IntMap (Candidate l c) -> IM.IntMap (Candidate l c)
+solve ::
+  (Language l, Ord c) =>
+  TreeCost l c ->
+  Snapshot r l ->
+  IM.IntMap (Candidate l c) ->
+  IM.IntMap (Candidate l c)
 solve model snap initial =
   let (next, changed) = foldl' improve (initial, False) (IM.elems (snapshotRows snap))
-  in if changed then solve model snap next else next
-  where
-    improve state@(_, _) (Stored _ _ _ False) = state
-    improve state@(table, changed) (Stored rep owner n True) =
-      case (IM.lookup owner (snapshotRoots snap), ftraverse (fetch snap table) n) of
-        (Just root, Just children) ->
-          let cost = model (ffmap (\(Costed c _) -> Const c) children)
-              better = case IM.lookup root table of
-                Nothing -> True
-                Just (Candidate _ old _) -> cost < old
-          in if better
-             then let tree = withTypeable rep (Term (ffmap (\(Costed _ t) -> t) children))
-                  in (IM.insert root (Candidate rep cost tree) table, True)
-             else (table, changed)
-        _ -> state
+   in if changed then solve model snap next else next
+ where
+  improve state@(_, _) (Stored _ _ _ False) = state
+  improve state@(table, changed) (Stored rep owner n True) =
+    case (IM.lookup owner (snapshotRoots snap), ftraverse (fetch snap table) n) of
+      (Just root, Just children) ->
+        let cost = model (ffmap (\(Costed c _) -> Const c) children)
+            better = case IM.lookup root table of
+              Nothing -> True
+              Just (Candidate _ old _) -> cost < old
+         in if better
+              then
+                let tree = withTypeable rep (Term (ffmap (\(Costed _ t) -> t) children))
+                 in (IM.insert root (Candidate rep cost tree) table, True)
+              else (table, changed)
+      _ -> state

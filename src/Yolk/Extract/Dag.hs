@@ -16,21 +16,38 @@
 -- Branch-and-bound is exact when it finishes, but can take exponential work.
 -- A bounded search reports 'Unproven' unless its lower bound proves optimality.
 module Yolk.Extract.Dag
-  ( DagCost, dagSizeCost
-  , DagLimits (..), defaultDagLimits, Optimality (..)
-  , DagResult, dag, dagCost, lowerBound, optimality, expansions
-  , Dag, dagNode, dagNodeId, dagSize, dagToTerm, foldDag, foldDagM, foldDagMany, foldDagManyM
-  , extractDagOptimal, extractDagMany
+  ( DagCost
+  , dagSizeCost
+  , DagLimits (..)
+  , defaultDagLimits
+  , Optimality (..)
+  , DagResult
+  , dag
+  , dagCost
+  , lowerBound
+  , optimality
+  , expansions
+  , Dag
+  , dagNode
+  , dagNodeId
+  , dagSize
+  , dagToTerm
+  , foldDag
+  , foldDagM
+  , foldDagMany
+  , foldDagManyM
+  , extractDagOptimal
+  , extractDagMany
   ) where
 
 import Data.Functor.Const (Const (..))
-import Data.HKD (FFunctor (..), FFoldable (..), FTraversable (..))
-import qualified Data.IntMap.Strict as IM
-import qualified Data.IntSet as IS
+import Data.HKD (FFoldable (..), FFunctor (..), FTraversable (..))
+import Data.IntMap.Strict qualified as IM
+import Data.IntSet qualified as IS
 import Data.Word (Word64)
 import Yolk.Backend (Backend)
 import Yolk.Dag
-import qualified Yolk.Internal.Dag as Search
+import Yolk.Internal.Dag qualified as Search
 import Yolk.Internal.Graph
 import Yolk.Internal.Types
 
@@ -48,7 +65,7 @@ dagSizeCost _ = 1
 -- proved. 'Just' zero still constructs a finite incumbent and checks the
 -- initial lower bound. This is not a time or memory limit: preprocessing and
 -- generating the children of one search state are outside the expansion cap.
-data DagLimits = DagLimits { expansionLimit :: !(Maybe Word64) }
+data DagLimits = DagLimits {expansionLimit :: !(Maybe Word64)}
   deriving (Eq, Show)
 
 -- | At most 100,000 branch expansions. This is a work cap,
@@ -69,9 +86,10 @@ data DagResult a = DagResult
   , lowerBound :: {-# UNPACK #-} !Word64
   , optimality :: !Optimality
   , expansions :: {-# UNPACK #-} !Word64
-  } deriving (Eq, Show)
+  }
+  deriving (Eq, Show)
 
-newtype One s f = One { getOne :: f s }
+newtype One s f = One {getOne :: f s}
 
 instance FFunctor (One s) where
   ffmap f (One x) = One (f x)
@@ -83,35 +101,53 @@ instance FTraversable (One s) where
 -- | Optimize one root. 'Nothing' means there is no finite visible derivation,
 -- not that the budget ran out. Even a zero budget returns a feasible incumbent
 -- when one exists. Equal-cost DAGs have no promised secondary ordering.
-extractDagOptimal :: (Backend b m, Language l)
-                  => DagLimits -> DagCost l -> ClassId r s
-                  -> EGraphT b r l m (Maybe (DagResult (Dag l s)))
-extractDagOptimal limits weight root = fmap unwrap <$>
-  extractDagMany limits weight (One root)
-  where
-    unwrap (DagResult value cost bound status count) =
-      DagResult (getOne value) cost bound status count
+extractDagOptimal ::
+  (Backend b m, Language l) =>
+  DagLimits ->
+  DagCost l ->
+  ClassId r s ->
+  EGraphT b r l m (Maybe (DagResult (Dag l s)))
+extractDagOptimal limits weight root =
+  fmap unwrap
+    <$> extractDagMany limits weight (One root)
+ where
+  unwrap (DagResult value cost bound status count) =
+    DagResult (getOne value) cost bound status count
 
 -- | Jointly optimize an HKD collection of roots, possibly at different sorts.
 -- Shared nodes across roots are charged once. Duplicate roots preserve their
 -- positions; an empty collection yields an optimal empty DAG of cost zero.
 -- A single representative is chosen for each reachable canonical e-class.
 -- Uses a rebuilt immutable snapshot with both graph backends.
-extractDagMany :: (Backend b m, Language l, FTraversable roots)
-               => DagLimits -> DagCost l -> roots (ClassId r)
-               -> EGraphT b r l m (Maybe (DagResult (roots (Dag l))))
+extractDagMany ::
+  (Backend b m, Language l, FTraversable roots) =>
+  DagLimits ->
+  DagCost l ->
+  roots (ClassId r) ->
+  EGraphT b r l m (Maybe (DagResult (roots (Dag l))))
 extractDagMany limits weight requested = do
   snap <- freeze
   roots <- ftraverse findClass requested
-  let problem = IM.fromListWith (++)
-        [ (owner, [Search.Node ident (ffoldMap childSet n) (weight (erase n))])
-        | (ident, Stored _ original n True) <- IM.toAscList (snapshotRows snap)
-        , Just owner <- [IM.lookup original (snapshotRoots snap)]
-        ]
+  let problem =
+        IM.fromListWith
+          (++)
+          [ (owner, [Search.Node ident (ffoldMap childSet n) (weight (erase n))])
+          | (ident, Stored _ original n True) <- IM.toAscList (snapshotRows snap)
+          , Just owner <- [IM.lookup original (snapshotRoots snap)]
+          ]
       childSet = IS.singleton . classIdIndex
   case Search.solve (expansionLimit limits) problem (ffoldMap childSet roots) of
     Nothing -> pure Nothing
     Just solution -> case dagFromSelection snap (Search.selection solution) roots of
       Nothing -> throwGraph InvalidExtraction
-      Just result -> pure (Just (DagResult result (Search.cost solution) (Search.bound solution)
-        (if Search.proven solution then Optimal else Unproven) (Search.expanded solution)))
+      Just result ->
+        pure
+          ( Just
+              ( DagResult
+                  result
+                  (Search.cost solution)
+                  (Search.bound solution)
+                  (if Search.proven solution then Optimal else Unproven)
+                  (Search.expanded solution)
+              )
+          )
