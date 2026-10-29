@@ -25,6 +25,11 @@ sh test/check-types.sh
 cabal run yolk-example
 ```
 
+GitHub Actions runs these checks on Ubuntu 24.04 with GHC 9.14.1 and
+Cabal 3.18.1.0. It also checks the 90-column limit and the benchmark gate's
+pass/fail wiring; timing comparisons against a machine-specific baseline
+remain local.
+
 The example simplifies a numeric conditional and its boolean condition
 using both backends. The expected results are `7` and `true`, each with
 AST size 1. It then demonstrates size, depth, operator weights, and a
