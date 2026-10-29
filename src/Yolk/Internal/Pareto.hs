@@ -20,9 +20,10 @@ module Yolk.Internal.Pareto
   , resultEntriesL, resultTerminationL, resultExpandedL, resultBoundsL
   , resultWitnessesCompleteL, resultVectorsCompleteL
   , _Exhausted, _WorkLimit, _ArchiveLimit
+  , _Partial
   ) where
 
-import Control.Lens (Lens', Prism', lens, prism')
+import Control.Lens (Iso', Lens', Prism', iso, lens, prism')
 import qualified Data.IntMap.Strict as IM
 import qualified Data.IntSet as IS
 import Data.List (foldl1', minimumBy, sortOn)
@@ -61,6 +62,12 @@ data Result = Result
   } deriving (Eq, Show)
 
 data Partial = Partial !Selection !IS.IntSet !Vector
+
+-- | The search-state product. This is an internal solver state, not a
+-- checked typed DAG or an extraction evidence record.
+_Partial :: Iso' Partial (Selection, IS.IntSet, Vector)
+_Partial = iso (\(Partial selected needed spent) -> (selected, needed, spent))
+  (\(selected, needed, spent) -> Partial selected needed spent)
 
 nodeIdL :: Lens' Node Int
 nodeIdL = lens nodeId (\s a -> s {nodeId = a})

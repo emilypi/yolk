@@ -25,6 +25,7 @@ import TestSupport
 import Yolk
 import qualified Yolk.Optics as O
 import qualified Yolk.Internal.Pareto as P
+import qualified Yolk.Dag as D
 
 literal :: Prism' (Math 'Number f) Integer
 literal = prism' Lit $ \case
@@ -33,7 +34,22 @@ literal = prism' Lit $ \case
 
 opticsTests :: TestTree
 opticsTests = testGroup "lens API"
-  [ QC.testProperty "all limit lenses obey get-set, set-get, and set-set" $
+  [ QC.testProperty "single-root helper isos round-trip their indexed payloads" $ \n ->
+      let value = Const n :: Const Int 'Number
+      in QC.conjoin
+        [ view _ParetoOne (review _ParetoOne value) QC.=== value
+        , view D._DagOne (review D._DagOne value) QC.=== value
+        , view _ParetoOne (review _ParetoOne (view _ParetoOne (review _ParetoOne value))) QC.=== value
+        , view D._DagOne (review D._DagOne (view D._DagOne (review D._DagOne value))) QC.=== value
+        ]
+  , testCase "partial-search state iso round-trips selections, demands and cost" $ do
+      let cost = V.fromList [1, 2]
+          fields = (IM.singleton 3 (P.Node 4 IS.empty cost), IS.singleton 5, cost)
+          partial = review P._Partial fields
+      assertEqual "product round trip" fields (view P._Partial partial)
+      assertEqual "state round trip through observable fields" fields
+        (view P._Partial (review P._Partial (view P._Partial partial)))
+  , QC.testProperty "all limit lenses obey get-set, set-get, and set-set" $
       \i n m x y ->
         let limits = Limits i n m
         in QC.conjoin

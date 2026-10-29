@@ -22,9 +22,10 @@ module Yolk.Extract.Pareto
   , paretoCoverage, paretoFeasibility, paretoTermination, paretoExpansions
   , paretoPendingBounds, paretoWitnessesComplete
   , extractParetoMany, extractPareto
+  , _ParetoOne
   ) where
 
-import Control.Lens (Getter, to)
+import Control.Lens (Getter, Iso', iso, to)
 import Control.Monad (unless)
 import Data.Functor.Const (Const (..))
 import Data.HKD (FFunctor (..), FFoldable (..), FTraversable (..))
@@ -214,6 +215,11 @@ fromSearch result candidates = ParetoResult candidates coverage feasibility term
       | otherwise = NoFeasibleFoundYet
 
 newtype One s f = One { getOne :: f s }
+
+-- | The single-root adapter preserves the indexed payload's sort.
+_ParetoOne :: Iso' (One s f) (f s)
+_ParetoOne = iso getOne One
+
 instance FFunctor (One s) where ffmap f (One a) = One (f a)
 instance FFoldable (One s) where ffoldMap f (One a) = f a
 instance FTraversable (One s) where ftraverse f (One a) = One <$> f a

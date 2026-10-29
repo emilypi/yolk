@@ -16,8 +16,10 @@ module Yolk.Dag
   ( Dag, dagNode, dagNodeId, dagSize, dagToTerm
   , foldDag, foldDagM, foldDagMany, foldDagManyM
   , dagFromSelection
+  , _DagOne, someDagSort, someDagNodeId, foldedSort
   ) where
 
+import Control.Lens (Getter, Iso', iso, to)
 import Control.Monad (guard)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.State.Strict (StateT, evalStateT, get, modify')
@@ -52,7 +54,23 @@ data SomeDag l where
 data Folded f where
   Folded :: !(TypeRep s) -> !(f s) -> Folded f
 
+-- | Existential helpers expose observations only. Their runtime witnesses
+-- cannot be replaced independently of their indexed payloads.
+someDagSort :: Getter (SomeDag l) SomeTypeRep
+someDagSort = to (\(SomeDag rep _) -> SomeTypeRep rep)
+
+someDagNodeId :: Getter (SomeDag l) Int
+someDagNodeId = to (\(SomeDag _ value) -> dagNodeId value)
+
+foldedSort :: Getter (Folded f) SomeTypeRep
+foldedSort = to (\(Folded rep _) -> SomeTypeRep rep)
+
 newtype One s f = One { getOne :: f s }
+
+-- | The single-root fold adapter preserves its payload's sort.
+_DagOne :: Iso' (One s f) (f s)
+_DagOne = iso getOne One
+
 instance FFunctor (One s) where ffmap f (One a) = One (f a)
 instance FFoldable (One s) where ffoldMap f (One a) = f a
 instance FTraversable (One s) where ftraverse f (One a) = One <$> f a
