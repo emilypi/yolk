@@ -40,6 +40,7 @@ library
     Yolk.Extract
     Yolk.Extract.Dag
     Yolk.Extract.Pareto
+    Yolk.Extract.Pareto.Error
     Yolk.Dag
     Yolk.Optics
     Yolk.Backend

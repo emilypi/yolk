@@ -17,6 +17,7 @@ module ParetoExtractionTests
   , summaryWitnessesCompleteL
   ) where
 
+import Control.Exception (evaluate)
 import Control.Lens (Lens', lens)
 import Control.Lens qualified as Lens
 import Control.Monad (foldM, forM, forM_, void)
@@ -34,6 +35,7 @@ import Data.Kind (Type)
 import Data.List (nub, sort)
 import Data.Maybe (mapMaybe)
 import Numeric.Natural (Natural)
+import System.Timeout (timeout)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase)
 import Test.Tasty.QuickCheck qualified as QC
@@ -104,7 +106,44 @@ paretoExtractionTests :: TestTree
 paretoExtractionTests =
   testGroup
     "shared Pareto extraction"
-    [ testCase "option parsing enforces every scalar and combined boundary" $ do
+    [ testCase "option parsing stops at the first scalar error" $ do
+        let options = exact
+              { paretoDimensions = 0
+              , paretoArchiveLimit = 0
+              , paretoWitnessLimit = -1
+              , paretoNodeLimit = 1000001
+              , paretoRootLimit = 0
+              , paretoCostBitLimit = 65537
+              }
+        assertEqual "first failure"
+          (Left (InvalidParetoOptions "dimensions must be between 1 and 64"))
+          (parseParetoOptions options)
+    , testCase "invalid prerequisites never inspect upper bounds" $ do
+        let options = exact
+              {paretoUpperBounds = Just (error "unchecked bounds were inspected")}
+        forM_
+          [ ( options {paretoDimensions = maxBound}
+            , "dimensions must be between 1 and 64"
+            )
+          , ( options {paretoCostBitLimit = maxBound}
+            , "cost bit limit must be between 1 and 65536"
+            )
+          , ( options {paretoArchiveLimit = 1001, paretoWitnessLimit = 1000}
+            , "archive/witness product exceeds 1000000"
+            )
+          ] $ \(invalid, message) ->
+            assertEqual "prerequisite fails first" (Left (InvalidParetoOptions message))
+              (parseParetoOptions invalid)
+    , testCase "infinite bounds are rejected after a bounded prefix" $ do
+        let options = exact {paretoUpperBounds = Just (repeat 0)}
+            expected = Left (ObjectiveDimensionMismatch 2 3)
+        result <- timeout 1000000 (evaluate (parseParetoOptions options == expected))
+        assertEqual "bounded parsing terminates" (Just True) result
+    , testCase "option parsing preserves the checked representation" $ do
+        let options = exact {paretoUpperBounds = Just [4, 4]}
+        assertEqual "raw options round trip" (Right options)
+          (Lens.view parsedParetoOptions <$> parseParetoOptions options)
+    , testCase "option parsing enforces every scalar and combined boundary" $ do
         let invalid =
               [ exact {paretoDimensions = 0}
               , exact {paretoDimensions = 65}

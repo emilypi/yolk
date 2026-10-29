@@ -52,6 +52,7 @@ import Data.Word (Word64)
 import Numeric.Natural (Natural)
 import Yolk.Backend (Backend)
 import Yolk.Dag (Dag, dagFromSelection)
+import Yolk.Extract.Pareto.Error
 import Yolk.Internal.Graph
 import Yolk.Internal.Pareto qualified as Search
 import Yolk.Internal.Types
@@ -88,12 +89,6 @@ defaultParetoOptions dimensions =
     100000
     10000
     4096
-
-data ParetoError
-  = InvalidParetoOptions !String
-  | ObjectiveDimensionMismatch !Int !Int
-  | ParetoInputLimit !String
-  deriving (Eq, Show)
 
 data ParetoCoverage = Complete | Partial | Approximate deriving (Eq, Show)
 data ParetoFeasibility = FeasibleFound | NoFeasibleFoundYet | ProvenInfeasible
@@ -161,47 +156,49 @@ parsedParetoOptions = to $ \options ->
     , paretoCostBitLimit = parsedCostBitLimit options
     }
 
+-- | Parse raw options into a bounded configuration, stopping at the first
+-- error. Check dimensions and precision before inspecting upper bounds.
 parseParetoOptions :: ParetoOptions -> Either ParetoError ParsedParetoOptions
 parseParetoOptions options = do
-  bounded "dimensions" 64 (paretoDimensions options)
-  bounded "archive limit" 1000000 (paretoArchiveLimit options)
-  bounded "witness limit" 1000000 (paretoWitnessLimit options)
-  bounded "node limit" 1000000 (paretoNodeLimit options)
-  bounded "root limit" 1000000 (paretoRootLimit options)
-  bounded "cost bit limit" 65536 (paretoCostBitLimit options)
-  unless
-    ( toInteger (paretoArchiveLimit options) * toInteger (paretoWitnessLimit options)
-        <= 1000000
-    )
-    (Left (InvalidParetoOptions "archive/witness product exceeds 1000000"))
-  let parsed =
-        ParsedParetoOptions
-          (paretoDimensions options)
-          Nothing
-          (paretoExpansionLimit options)
-          (paretoArchiveLimit options)
-          (paretoWitnessLimit options)
-          (paretoNodeLimit options)
-          (paretoRootLimit options)
-          (paretoCostBitLimit options)
-  bounds <- traverse (parseVector parsed) (paretoUpperBounds options)
-  pure parsed {parsedUpperBounds = bounds}
+  dimensions <- bounded "dimensions" 64 (paretoDimensions options)
+  archive <- bounded "archive limit" 1000000 (paretoArchiveLimit options)
+  witnesses <- bounded "witness limit" 1000000 (paretoWitnessLimit options)
+  nodes <- bounded "node limit" 1000000 (paretoNodeLimit options)
+  roots <- bounded "root limit" 1000000 (paretoRootLimit options)
+  precision <- bounded "cost bit limit" 65536 (paretoCostBitLimit options)
+  unless (toInteger archive * toInteger witnesses <= 1000000) $
+    Left (InvalidParetoOptions "archive/witness product exceeds 1000000")
+  bounds <- traverse (parseVectorWith dimensions precision) (paretoUpperBounds options)
+  pure ParsedParetoOptions
+    { parsedDimensions = dimensions
+    , parsedUpperBounds = bounds
+    , parsedExpansionLimit = paretoExpansionLimit options
+    , parsedArchiveLimit = archive
+    , parsedWitnessLimit = witnesses
+    , parsedNodeLimit = nodes
+    , parsedRootLimit = roots
+    , parsedCostBitLimit = precision
+    }
  where
-  bounded label upper value =
-    unless
-      (value > 0 && value <= upper)
-      (Left (InvalidParetoOptions (label ++ " must be between 1 and " ++ show upper)))
+  bounded label upper value
+    | value > 0 && value <= upper = Right value
+    | otherwise = Left $
+        InvalidParetoOptions (label ++ " must be between 1 and " ++ show upper)
 
 parseVector ::
   ParsedParetoOptions -> [Natural] -> Either ParetoError (V.Vector Natural)
-parseVector options raw = do
-  let dimension = parsedDimensions options
-      vector = take (dimension + 1) raw
+parseVector options =
+  parseVectorWith (parsedDimensions options) (parsedCostBitLimit options)
+
+-- Dimensions and precision must have passed their scalar checks first.
+parseVectorWith :: Int -> Int -> [Natural] -> Either ParetoError (V.Vector Natural)
+parseVectorWith dimension precision raw = do
+  let vector = take (dimension + 1) raw
   unless
     (length vector == dimension)
     (Left (ObjectiveDimensionMismatch dimension (length vector)))
   unless
-    (all (< (2 ^ parsedCostBitLimit options :: Natural)) vector)
+    (all (< (2 ^ precision :: Natural)) vector)
     (Left (ParetoInputLimit "objective or bound exceeds the input bit limit"))
   pure (V.fromList vector)
 

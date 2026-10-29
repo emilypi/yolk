@@ -366,6 +366,12 @@ For example, `parseParetoOptions (options & O.paretoDimensions .~ 0)` rejects
 the invalid edit. The archive/witness product is validated together, and
 upper bounds must match the dimension and input precision limits.
 
+`parseParetoOptions` returns `Either ParetoError ParsedParetoOptions`, stopping
+at the first error. It checks scalar limits before the archive/witness product
+and upper-bound vector. Invalid dimensions or precision never reach vector
+inspection, and an oversized vector is rejected after a bounded prefix.
+The checked record is constructed only after every step succeeds.
+
 Candidates, Pareto results and scalar DAG results use named record selectors.
 `Yolk.Optics` provides their field lenses, option lenses, and status/error
 prisms. These support ordinary user edits; vector costs and completeness
