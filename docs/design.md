@@ -149,9 +149,10 @@ algebra once per reachable node. IDs are meaningful only within one
 extraction result. A typed reconstruction inconsistency reports
 `InvalidExtraction`, distinct from the normal absence of a finite witness.
 
-`DagResult` is opaque: its feasible output, incumbent cost, lower bound,
-proof status, and expansion count have read-only accessors and `lens`
-getters. Only `DagLimits.expansionLimit` has a writable lens. `Optimal`
+`DagResult` uses named record fields for its feasible output, incumbent cost,
+lower bound, proof status and expansion count, with `lens` lenses.
+Edits are ordinary user changes and do not revalidate the certificate. For
+an extractor-produced result, `Optimal`
 means lower bound equals cost; `Unproven` retains the incumbent without
 claiming a proof. The entire result concerns the current visible e-graph,
 not equalities a future saturation run might discover.
@@ -252,3 +253,45 @@ does not amend it.
   Knuth, 1977.
 - [Weighted quick-union](https://algs4.cs.princeton.edu/15uf/WeightedQuickUnionUF.java.html),
   Sedgewick and Wayne.
+
+## Pareto extraction
+
+The additive-vector search keeps complete global class selections, preserving
+cross-root sharing. Its lower bound charges accumulated cost plus coordinatewise
+minimum weights for each distinct demanded but unselected class. These minima
+need not occur in the same representative: each is still a lower bound, and
+omitting further descendants only weakens it. Strict dominance by a feasible
+archive entry can therefore discard a branch without losing nondominated
+vectors or equal-vector witnesses. Inclusive upper bounds prune only when the
+lower bound already violates a constraint.
+
+`Yolk.Internal.Pareto` operates on immutable sort-erased choices.
+`Yolk.Extract.Pareto` parses dimensions and limits into an opaque bounded
+configuration, freezes the live graph,
+and reconstructs each candidate through `Yolk.Dag`'s checked constructor.
+The constructor checks visibility, selected-class membership, sorts and cycles.
+Public candidates and results are named records with field lenses. Their
+evidence applies to the extractor-produced values; callers can edit these
+records, but doing so does not revalidate costs or completeness claims.
+The solver uses boxed `Vector Natural` coordinates for repeated arithmetic
+and dominance checks, while the public boundary keeps list-based costs.
+Componentwise reductions use strict folds, including minima and pending bounds.
+A snapshot selection asserts no semantic fact beyond the graph's equalities;
+proof-producing rewrite explanations remain a separate outstanding feature.
+
+The archive retains at most the requested witnesses per vector. Dropping tied
+witnesses does not lose vector coverage. When adding an incomparable vector
+exceeds the archive limit, the extractor keeps a deterministic bounded subset
+and stops as `Approximate/ArchiveBudget`. It does not continue with unsound
+claims that discarded witnesses still participate in dominance tests.
+An expansion stop returns at most one componentwise lower envelope of pending
+branches. If every pending lower bound is weakly dominated, vector coverage
+is complete despite incomplete witness enumeration.
+
+Tests compare the full vector set with an independent exhaustive oracle that
+selects representatives for every class before DFS checking only the reachable
+closure. Random cases include cyclic choices, sharing, duplicate roots,
+zero costs and hard bounds. Returned witnesses are independently rescored and
+checked for root mapping, membership, acyclicity and one selected node per
+class. Both backends run the same cases. This supports extraction-model claims;
+it does not establish physical circuit quality or complete Yolk v1 delivery.

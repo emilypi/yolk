@@ -19,6 +19,7 @@ module Yolk.Language
 import Data.HKD (FFunctor (..))
 import Type.Reflection (Typeable)
 import Yolk.Internal.Types
+import Yolk.Internal.Graph (ClassId)
 
 -- | Construct a term at its known result sort.
 term :: Typeable s => l s (Term l) -> Term l s

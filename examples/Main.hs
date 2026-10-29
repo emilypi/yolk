@@ -19,6 +19,7 @@ import Data.HKD (FFoldable (..), FFunctor (..), FTraversable (..), ffoldMapDefau
 import Data.Kind (Type)
 import Data.IORef (newIORef, atomicModifyIORef')
 import Data.Word (Word64)
+import Numeric.Natural (Natural)
 import System.Exit (die)
 import Yolk
 import qualified Yolk.Optics as O
@@ -124,6 +125,9 @@ main = case rules of
     putStrLn "\nSolver-free optimal DAG minimization"
     displayDagChoices "Mutable" (runMutable minimizeDag)
     displayDagChoices "Persistent" (runPersistent minimizeDag)
+    putStrLn "\nPareto portfolio (illustrative structural costs)"
+    displayPareto "Mutable" (runMutable paretoExample)
+    displayPareto "Persistent" (runPersistent paretoExample)
 
 display :: String -> Either EGraphError Simplification -> IO ()
 display backend = \case
@@ -286,3 +290,32 @@ renderLayer = \case
   Mul (Const a) (Const b) -> a ++ " * " ++ b
   Equal (Const a) (Const b) -> a ++ " == " ++ b
   If (Const c) (Const t) (Const e) -> "if " ++ c ++ " then " ++ t ++ " else " ++ e
+
+-- These three expressions all equal six. The costs are deliberately chosen
+-- to exhibit a nondominated point unsupported by any positive weighted sum;
+-- they are illustrative extraction-model units, not hardware measurements.
+paretoExample :: Backend b m
+  => EGraphT b r Math m (Either ParetoError (ParetoCoverage, [([Natural], String)]))
+paretoExample = do
+  literal <- add (Lit 6)
+  addition <- addTerm (term (Add (term (Lit 3)) (term (Lit 3))))
+  multiplication <- addTerm (term (Mul (term (Lit 2)) (term (Lit 3))))
+  void (union literal addition)
+  void (union literal multiplication)
+  let options = defaultParetoOptions 2 & O.paretoExpansionLimit .~ Nothing
+  result <- extractPareto options weight literal
+  pure $ fmap (\r -> (paretoCoverage r,
+    [(candidateCost c, pretty (dagToTerm (candidateValue c))) | c <- paretoCandidates r])) result
+  where
+    weight :: Math s f -> [Natural]
+    weight (Lit 6) = [1, 6]
+    weight Add {} = [4, 4]
+    weight Mul {} = [6, 1]
+    weight _ = [0, 0]
+
+displayPareto :: String -> Either EGraphError (Either ParetoError (ParetoCoverage, [([Natural], String)])) -> IO ()
+displayPareto backend result = case result of
+  Right (Right (Complete, choices)) | map fst choices == [[1, 6], [4, 4], [6, 1]] -> do
+    putStrLn (backend ++ ": complete model frontier")
+    mapM_ (\(cost, expression') -> putStrLn ("  " ++ show cost ++ "  " ++ expression')) choices
+  _ -> die (backend ++ " Pareto demonstration failed: " ++ show result)

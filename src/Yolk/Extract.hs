@@ -126,8 +126,10 @@ extractWith model requested = do
     Just (Costed cost tree) -> pure (Just (cost, tree))
 
 fetch :: Snapshot r l -> IM.IntMap (Candidate l c) -> ClassId r s -> Maybe (Costed l c s)
-fetch snap table c@(ClassId rep _) = do
-  ClassId _ root <- snapshotFind c snap
+fetch snap table c = do
+  canonical <- snapshotFind c snap
+  let root = classIdIndex canonical
+      rep = classIdRep c
   Candidate actual cost tree <- IM.lookup root table
   case eqTypeRep rep actual of
     Just HRefl -> Just (Costed cost tree)

@@ -369,7 +369,7 @@ data Observation = Observation
 observe :: SmallGraph -> DagResult (NumberRoots (Dag Synthetic)) -> Observation
 observe (SmallGraph classes requested) answer =
   let NumberRoots roots = dag answer
-      (consistent, rows) = foldl collect (True, IM.empty) roots
+      (consistent, rows) = foldl' collect (True, IM.empty) roots
       owners = [owner | Row owner _ _ _ <- IM.elems rows]
       rootOwners = [owner | root <- roots, let Synthetic owner _ _ _ = dagNode root]
       validRow (identifier, Row owner choice weight children) =
@@ -394,7 +394,7 @@ observe (SmallGraph classes requested) answer =
             row = Row owner choice weight (map dagNodeId children)
         in case IM.lookup identifier rows of
           Just previous -> (consistent && row == previous, rows)
-          Nothing -> foldl collect (consistent, IM.insert identifier row rows) children
+          Nothing -> foldl' collect (consistent, IM.insert identifier row rows) children
 
 agreesWithOracle :: SmallGraph -> Word64 -> QC.Property
 agreesWithOracle specification budget =

@@ -37,9 +37,11 @@ library
     Yolk.Rewrite
     Yolk.Extract
     Yolk.Extract.Dag
+    Yolk.Extract.Pareto
+    Yolk.Dag
     Yolk.Optics
     Yolk.Backend
-  other-modules:
+    Yolk.Internal.Pareto
     Yolk.Internal.Types
     Yolk.Internal.Graph
     Yolk.Internal.Dag
@@ -48,7 +50,8 @@ library
     hkd == 0.2.1,
     lens >= 5.3 && < 5.4,
     primitive >= 0.9 && < 0.10,
-    transformers >= 0.6 && < 0.7
+    transformers >= 0.6 && < 0.7,
+    vector >= 0.13 && < 0.14
 
 test-suite yolk-tests
   import: settings
@@ -56,7 +59,7 @@ test-suite yolk-tests
   hs-source-dirs: test bench-support bench-report
   main-is: Main.hs
   other-modules:
-    TestLanguage TestSupport ExtractionTests DagExtractionTests OpticsTests
+    TestLanguage TestSupport ExtractionTests DagExtractionTests ParetoExtractionTests OpticsTests
     BenchVectors BenchmarkTests BenchReport BenchmarkReportTests
   build-depends:
     yolk,
