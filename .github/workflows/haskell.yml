@@ -1,0 +1,66 @@
+name: Haskell CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check source width
+        run: sh test/check-width.sh
+
+      - name: Set up Haskell
+        id: haskell
+        uses: haskell-actions/setup@0f8e8c99d88aeb3fbfd523f1ef2c6f762d10d64d # v2.12.1
+        with:
+          ghc-version: '9.14.1'
+          cabal-version: '3.18.1.0'
+
+      - name: Restore dependencies
+        id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.haskell.outputs.cabal-store }}
+          key: >-
+            ubuntu24-ghc9.14.1-cabal3.18.1.0-${{
+            hashFiles('*.cabal', 'cabal.project*') }}
+          restore-keys: ubuntu24-ghc9.14.1-cabal3.18.1.0-
+
+      - name: Build library, examples, tests and benchmarks
+        run: cabal build all --ghc-options=-Werror
+
+      - name: Save dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.haskell.outputs.cabal-store }}
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
+      - name: Run tests
+        run: cabal test all --offline --ghc-options=-Werror --test-show-details=direct
+
+      - name: Check type boundaries
+        run: sh test/check-types.sh
+
+      - name: Run examples
+        run: cabal run yolk-example --offline
+
+      - name: Check benchmark gate wiring
+        run: sh test/check-bench-gate.sh
