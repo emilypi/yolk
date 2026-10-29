@@ -80,6 +80,7 @@ executable yolk-example
   import: settings
   hs-source-dirs: examples
   main-is: Main.hs
+  other-modules: ExampleResults
   build-depends: yolk, hkd, lens
 
 benchmark yolk-bench

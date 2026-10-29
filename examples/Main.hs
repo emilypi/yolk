@@ -25,6 +25,7 @@ import Data.HKD
 import Data.IORef (atomicModifyIORef', newIORef)
 import Data.Kind (Type)
 import Data.Word (Word64)
+import ExampleResults
 import Numeric.Natural (Natural)
 import System.Exit (die)
 import Yolk
@@ -97,11 +98,14 @@ rules =
   x = review O._Var "x"
   y = review O._Var "y"
 
-data Simplification = Simplification
-  { reason :: StopReason
-  , numericResult :: Maybe (Int, String)
-  , booleanResult :: Maybe (Int, String)
-  }
+summarizeTree :: (cost, Term Math s) -> CandidateSummary cost
+summarizeTree (cost, tree) =
+  CandidateSummary {summaryCost = cost, summaryExpression = pretty tree}
+
+-- Preserve the compact printed format at the presentation boundary.
+showCandidate :: Show cost => Maybe (CandidateSummary cost) -> String
+showCandidate =
+  show . fmap (\candidate -> (summaryCost candidate, summaryExpression candidate))
 
 simplify :: Backend b m => [Rewrite Math] -> EGraphT b r Math m Simplification
 simplify rewrites = do
@@ -114,8 +118,8 @@ simplify rewrites = do
   pure
     Simplification
       { reason = result ^. O.stopReason
-      , numericResult = fmap (\(cost, tree) -> (cost, pretty tree)) numeric
-      , booleanResult = fmap (\(cost, tree) -> (cost, pretty tree)) boolean
+      , numericResult = summarizeTree <$> numeric
+      , booleanResult = summarizeTree <$> boolean
       }
 
 main :: IO ()
@@ -134,8 +138,8 @@ main = case rules of
     displayDagChoices "Mutable" (runMutable minimizeDag)
     displayDagChoices "Persistent" (runPersistent minimizeDag)
     putStrLn "\nPareto portfolio (illustrative structural costs)"
-    displayPareto "Mutable" (runMutable paretoExample)
-    displayPareto "Persistent" (runPersistent paretoExample)
+    displayPareto "Mutable" (portfolioOutcome (runMutable paretoExample))
+    displayPareto "Persistent" (portfolioOutcome (runPersistent paretoExample))
 
 display :: String -> Either EGraphError Simplification -> IO ()
 display backend = \case
@@ -145,22 +149,22 @@ display backend = \case
     printResult "Number" (numericResult result)
     printResult "Boolean" (booleanResult result)
     if reason result == Saturated
-      && numericResult result == Just (1, "7")
-      && booleanResult result == Just (1, "true")
+      && numericResult result == Just (CandidateSummary 1 "7")
+      && booleanResult result == Just (CandidateSummary 1 "true")
       then pure ()
       else die (backend ++ " did not produce the expected simplification")
  where
-  printResult :: String -> Maybe (Int, String) -> IO ()
+  printResult :: String -> Maybe (CandidateSummary Int) -> IO ()
   printResult label = \case
     Nothing -> die (backend ++ ": no finite " ++ label ++ " term")
-    Just (cost, rendered) ->
+    Just candidate ->
       putStrLn
         ( "  "
             ++ label
             ++ " result: "
-            ++ rendered
+            ++ summaryExpression candidate
             ++ " (AST size "
-            ++ show cost
+            ++ show (summaryCost candidate)
             ++ ")"
         )
 
@@ -185,14 +189,6 @@ preferAddition n =
   multiplication :: Math s f -> Word64
   multiplication Mul {} = 1
   multiplication _ = 0
-
-data Choices = Choices
-  { smallest :: Maybe (Word64, String)
-  , cheapest :: Maybe (Word64, String)
-  , shallowest :: Maybe (Word64, String)
-  , lexicographic :: Maybe ((Word64, Word64), String)
-  }
-  deriving (Eq, Show)
 
 minimize :: Backend b m => EGraphT b r Math m Choices
 minimize = do
@@ -222,40 +218,36 @@ minimize = do
   void (union deep shallow)
   byDepth <- extractWith astDepth deep
   pure
-    ( Choices (render bySize) (render byWeight) (render byDepth) (render byPreference)
-    )
- where
-  render :: Maybe (c, Term Math s) -> Maybe (c, String)
-  render = fmap (\(cost, tree) -> (cost, pretty tree))
+    Choices
+      { smallest = summarizeTree <$> bySize
+      , cheapest = summarizeTree <$> byWeight
+      , shallowest = summarizeTree <$> byDepth
+      , lexicographic = summarizeTree <$> byPreference
+      }
 
 displayChoices :: String -> Either EGraphError Choices -> IO ()
 displayChoices backend = \case
   Left err -> die (backend ++ " minimization failed: " ++ show err)
   Right actual -> do
     putStrLn ("\n" ++ backend ++ " backend")
-    putStrLn ("  AST size:             " ++ show (smallest actual))
-    putStrLn ("  Weighted operations:  " ++ show (cheapest actual))
-    putStrLn ("  AST depth:            " ++ show (shallowest actual))
-    putStrLn ("  (multiplications, size): " ++ show (lexicographic actual))
+    putStrLn ("  AST size:             " ++ showCandidate (smallest actual))
+    putStrLn ("  Weighted operations:  " ++ showCandidate (cheapest actual))
+    putStrLn ("  AST depth:            " ++ showCandidate (shallowest actual))
+    putStrLn ("  (multiplications, size): " ++ showCandidate (lexicographic actual))
     if actual == expected
       then pure ()
       else die (backend ++ " did not produce the expected cost-model choices")
  where
   expected =
     Choices
-      (Just (3, "(2 * 3)"))
-      (Just (5, "(2 + (2 + 2))"))
-      (Just (3, "if (1 == 1) then (2 + 2) else (2 + 2)"))
-      (Just ((0, 5), "(2 + (2 + 2))"))
+      { smallest = Just (CandidateSummary 3 "(2 * 3)")
+      , cheapest = Just (CandidateSummary 5 "(2 + (2 + 2))")
+      , shallowest =
+          Just (CandidateSummary 3 "if (1 == 1) then (2 + 2) else (2 + 2)")
+      , lexicographic = Just (CandidateSummary (0, 5) "(2 + (2 + 2))")
+      }
 
-data DagChoices = DagChoices
-  { treeChoice :: Maybe (Word64, String)
-  , sharedChoice :: Maybe (DagResult (Dag Math 'Number))
-  , weightedChoice :: Maybe (DagResult (Dag Math 'Number))
-  , limitedChoice :: Maybe (DagResult (Dag Math 'Number))
-  }
-
-minimizeDag :: Backend b m => EGraphT b r Math m DagChoices
+minimizeDag :: Backend b m => EGraphT b r Math m (DagChoices (Dag Math 'Number))
 minimizeDag = do
   let one = term (Lit 1)
       pair = term (Add one one)
@@ -271,16 +263,23 @@ minimizeDag = do
   best <- extractDagOptimal exact dagSizeCost smallTree
   weighted <- extractDagOptimal exact operationWeight smallTree
   limited <- extractDagOptimal seedOnly dagSizeCost smallTree
-  pure (DagChoices (fmap (\(c, t) -> (c, pretty t)) tree) best weighted limited)
+  pure
+    DagChoices
+      { treeChoice = summarizeTree <$> tree
+      , sharedChoice = best
+      , weightedChoice = weighted
+      , limitedChoice = limited
+      }
 
-displayDagChoices :: String -> Either EGraphError DagChoices -> IO ()
+displayDagChoices ::
+  String -> Either EGraphError (DagChoices (Dag Math 'Number)) -> IO ()
 displayDagChoices backend = \case
   Left err -> die (backend ++ " DAG extraction failed: " ++ show err)
   Right choices -> case
     (sharedChoice choices, weightedChoice choices, limitedChoice choices) of
     (Just best, Just weighted, Just limited) -> do
       putStrLn ("\n" ++ backend ++ " backend")
-      putStrLn ("  Tree optimum: " ++ show (treeChoice choices))
+      putStrLn ("  Tree optimum: " ++ showCandidate (treeChoice choices))
       displayCertificate "DAG optimum" best
       displayCertificate "Weighted DAG" weighted
       displayCertificate "Zero-expansion budget" limited
@@ -294,7 +293,7 @@ displayDagChoices backend = \case
             pure (Const name)
       Const name <- foldDagM emit (dag best)
       putStrLn ("    result = " ++ name)
-      if treeChoice choices == Just (5, "(1 + (2 + 1))")
+      if treeChoice choices == Just (CandidateSummary 5 "(1 + (2 + 1))")
         && dagCost best == 3
         && dagSize (dag best) == 3
         && optimality best == Optimal
@@ -341,7 +340,7 @@ renderLayer = \case
 -- they are illustrative extraction-model units, not hardware measurements.
 paretoExample ::
   Backend b m =>
-  EGraphT b r Math m (Either ParetoError (ParetoCoverage, [([Natural], String)]))
+  EGraphT b r Math m (Either ParetoError FrontierSummary)
 paretoExample = do
   literal <- add (Lit 6)
   addition <- addTerm (term (Add (term (Lit 3)) (term (Lit 3))))
@@ -353,11 +352,16 @@ paretoExample = do
   pure $
     fmap
       ( \r ->
-          ( paretoCoverage r
-          , [ (candidateCost c, pretty (dagToTerm (candidateValue c)))
-            | c <- paretoCandidates r
-            ]
-          )
+          FrontierSummary
+            { frontierCoverage = paretoCoverage r
+            , frontierCandidates =
+                [ CandidateSummary
+                    { summaryCost = ObjectiveCosts (candidateCost c)
+                    , summaryExpression = pretty (dagToTerm (candidateValue c))
+                    }
+                | c <- paretoCandidates r
+                ]
+            }
       )
       result
  where
@@ -367,14 +371,17 @@ paretoExample = do
   weight Mul {} = [6, 1]
   weight _ = [0, 0]
 
-displayPareto ::
-  String ->
-  Either EGraphError (Either ParetoError (ParetoCoverage, [([Natural], String)])) ->
-  IO ()
+displayPareto :: String -> PortfolioOutcome -> IO ()
 displayPareto backend result = case result of
-  Right (Right (Complete, choices)) | map fst choices == [[1, 6], [4, 4], [6, 1]] -> do
-    putStrLn (backend ++ ": complete model frontier")
-    mapM_
-      (\(cost, expression') -> putStrLn ("  " ++ show cost ++ "  " ++ expression'))
-      choices
+  FrontierFound frontier
+    | frontierCoverage frontier == Complete
+    , map costs (frontierCandidates frontier) == [[1, 6], [4, 4], [6, 1]] -> do
+        putStrLn (backend ++ ": complete model frontier")
+        mapM_ printCandidate (frontierCandidates frontier)
+  GraphFailed err -> die (backend ++ " graph failed: " ++ show err)
+  ExtractionFailed err -> die (backend ++ " Pareto extraction failed: " ++ show err)
   _ -> die (backend ++ " Pareto demonstration failed: " ++ show result)
+ where
+  costs = getObjectiveCosts . summaryCost
+  printCandidate candidate =
+    putStrLn ("  " ++ show (costs candidate) ++ "  " ++ summaryExpression candidate)

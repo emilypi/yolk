@@ -344,6 +344,21 @@ let options = (defaultParetoOptions 2)
 portfolio <- extractParetoMany options cost roots
 ```
 
+The executable's [result types](examples/ExampleResults.hs) name the values
+used to present extraction results. `CandidateSummary cost` records a cost and
+rendered expression; `ObjectiveCosts` names the vector of Pareto coordinates;
+`FrontierSummary` records coverage and candidate summaries. Its graph action is:
+
+```haskell
+paretoExample ::
+  Backend b m => EGraphT b r Math m (Either ParetoError FrontierSummary)
+```
+
+At the display boundary, `PortfolioOutcome` distinguishes graph failure,
+extraction failure, and a returned frontier. These presentation types and their
+optics live together. The library's extraction signatures remain unchanged;
+the examples give their results names as they cross into presentation code.
+
 `parseParetoOptions` constructs an opaque bounded configuration. Extraction
 uses this boundary automatically, including after raw option record updates.
 `parsedParetoOptions` is a getter optic that recovers editable raw options.

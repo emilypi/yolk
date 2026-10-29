@@ -7,8 +7,17 @@
 -- Maintainer   : Emily Pillmore <emilypi@cohomolo.gy>
 -- Stability    : experimental
 -- Portability  : non-portable (GHC extensions)
-module ParetoExtractionTests (paretoExtractionTests) where
+module ParetoExtractionTests
+  ( paretoExtractionTests
+  , SearchSummary (..)
+  , summaryCandidatesL
+  , summaryCoverageL
+  , summaryFeasibilityL
+  , summaryTerminationL
+  , summaryWitnessesCompleteL
+  ) where
 
+import Control.Lens (Lens', lens)
 import Control.Lens qualified as Lens
 import Control.Monad (foldM, forM, forM_, void)
 import Data.Either (isLeft)
@@ -50,16 +59,46 @@ tradeoff Add {} = [4, 4]
 tradeoff Mul {} = [6, 1]
 tradeoff _ = [0, 0]
 
-summary ::
-  ParetoResult a ->
-  ([[Natural]], ParetoCoverage, ParetoFeasibility, ParetoTermination, Bool)
-summary result =
-  ( map candidateCost (paretoCandidates result)
-  , paretoCoverage result
-  , paretoFeasibility result
-  , paretoTermination result
-  , paretoWitnessesComplete result
-  )
+-- Candidate observations vary by assertion: some compare coordinates and
+-- others compare the archive size. The evidence fields retain their names.
+data SearchSummary candidates = SearchSummary
+  { summaryCandidates :: candidates
+  , summaryCoverage :: ParetoCoverage
+  , summaryFeasibility :: ParetoFeasibility
+  , summaryTermination :: ParetoTermination
+  , summaryWitnessesComplete :: Bool
+  }
+  deriving (Eq, Show)
+
+summaryCandidatesL :: Lens' (SearchSummary candidates) candidates
+summaryCandidatesL = lens summaryCandidates (\s a -> s {summaryCandidates = a})
+
+summaryCoverageL :: Lens' (SearchSummary candidates) ParetoCoverage
+summaryCoverageL = lens summaryCoverage (\s a -> s {summaryCoverage = a})
+
+summaryFeasibilityL :: Lens' (SearchSummary candidates) ParetoFeasibility
+summaryFeasibilityL = lens summaryFeasibility (\s a -> s {summaryFeasibility = a})
+
+summaryTerminationL :: Lens' (SearchSummary candidates) ParetoTermination
+summaryTerminationL = lens summaryTermination (\s a -> s {summaryTermination = a})
+
+summaryWitnessesCompleteL :: Lens' (SearchSummary candidates) Bool
+summaryWitnessesCompleteL =
+  lens summaryWitnessesComplete (\s a -> s {summaryWitnessesComplete = a})
+
+summarize ::
+  ([ParetoCandidate a] -> candidates) -> ParetoResult a -> SearchSummary candidates
+summarize observeCandidates result =
+  SearchSummary
+    { summaryCandidates = observeCandidates (paretoCandidates result)
+    , summaryCoverage = paretoCoverage result
+    , summaryFeasibility = paretoFeasibility result
+    , summaryTermination = paretoTermination result
+    , summaryWitnessesComplete = paretoWitnessesComplete result
+    }
+
+summary :: ParetoResult a -> SearchSummary [[Natural]]
+summary = summarize (map candidateCost)
 
 paretoExtractionTests :: TestTree
 paretoExtractionTests =
@@ -111,20 +150,40 @@ paretoExtractionTests =
             (Lens.view parsedParetoOptions <$> parseParetoOptions options)
     , both
         "retains a nonconvex tradeoff missed by weighted sums"
-        ( Right ([[1, 6], [4, 4], [6, 1]], Complete, FeasibleFound, SearchExhausted, True)
+        ( Right SearchSummary
+            { summaryCandidates = [[1, 6], [4, 4], [6, 1]]
+            , summaryCoverage = Complete
+            , summaryFeasibility = FeasibleFound
+            , summaryTermination = SearchExhausted
+            , summaryWitnessesComplete = True
+            }
         )
         $ Program
         $ alternatives >>= fmap (fmap summary) . extractPareto exact tradeoff
     , both
         "hard upper bounds retain the feasible middle alternative"
-        (Right ([[4, 4]], Complete, FeasibleFound, SearchExhausted, True))
+        ( Right SearchSummary
+            { summaryCandidates = [[4, 4]]
+            , summaryCoverage = Complete
+            , summaryFeasibility = FeasibleFound
+            , summaryTermination = SearchExhausted
+            , summaryWitnessesComplete = True
+            }
+        )
         $ Program
         $ alternatives
           >>= fmap (fmap summary)
             . extractPareto (exact {paretoUpperBounds = Just [4, 4]}) tradeoff
     , both
         "zero budget with an infeasible seed does not prove infeasibility"
-        (Right ([], Partial, NoFeasibleFoundYet, ExpansionBudget, False))
+        ( Right SearchSummary
+            { summaryCandidates = []
+            , summaryCoverage = Partial
+            , summaryFeasibility = NoFeasibleFoundYet
+            , summaryTermination = ExpansionBudget
+            , summaryWitnessesComplete = False
+            }
+        )
         $ Program
         $ alternatives
           >>= fmap (fmap summary)
@@ -133,7 +192,14 @@ paretoExtractionTests =
               tradeoff
     , both
         "bounds alone can prove infeasibility at zero budget"
-        (Right ([], Complete, ProvenInfeasible, SearchExhausted, True))
+        ( Right SearchSummary
+            { summaryCandidates = []
+            , summaryCoverage = Complete
+            , summaryFeasibility = ProvenInfeasible
+            , summaryTermination = SearchExhausted
+            , summaryWitnessesComplete = True
+            }
+        )
         $ Program
         $ alternatives
           >>= fmap (fmap summary)
@@ -142,26 +208,36 @@ paretoExtractionTests =
               tradeoff
     , both
         "archive truncation reports approximation and never complete coverage"
-        (Right (2, Approximate, FeasibleFound, ArchiveBudget, False))
+        ( Right SearchSummary
+            { summaryCandidates = 2
+            , summaryCoverage = Approximate
+            , summaryFeasibility = FeasibleFound
+            , summaryTermination = ArchiveBudget
+            , summaryWitnessesComplete = False
+            }
+        )
         $ Program
         $ do
           root <- alternatives
           result <- extractPareto (exact {paretoArchiveLimit = 2}) tradeoff root
-          pure
-            ( fmap
-                ( \r ->
-                    ( length (paretoCandidates r)
-                    , paretoCoverage r
-                    , paretoFeasibility r
-                    , paretoTermination r
-                    , paretoWitnessesComplete r
-                    )
-                )
-                result
-            )
+          pure (summarize length <$> result)
     , both
         "vector completeness is independent from equal-vector witness sampling"
-        (Right (1, Complete, False), Right (3, Complete, True))
+        ( Right SearchSummary
+            { summaryCandidates = 1
+            , summaryCoverage = Complete
+            , summaryFeasibility = FeasibleFound
+            , summaryTermination = SearchExhausted
+            , summaryWitnessesComplete = False
+            }
+        , Right SearchSummary
+            { summaryCandidates = 3
+            , summaryCoverage = Complete
+            , summaryFeasibility = FeasibleFound
+            , summaryTermination = SearchExhausted
+            , summaryWitnessesComplete = True
+            }
+        )
         $ Program
         $ do
           root <- alternatives
@@ -170,20 +246,19 @@ paretoExtractionTests =
               weight Add {} = [1, 1]
               weight Mul {} = [1, 1]
               weight _ = [0, 0]
-              view =
-                fmap
-                  ( \r ->
-                      ( length (paretoCandidates r)
-                      , paretoCoverage r
-                      , paretoWitnessesComplete r
-                      )
-                  )
           one <- extractPareto exact weight root
           allThree <- extractPareto (exact {paretoWitnessLimit = 3}) weight root
-          pure (view one, view allThree)
+          pure (summarize length <$> one, summarize length <$> allThree)
     , both
         "a zero-cost seed can establish vector coverage before witness search"
-        (Right ([[0, 0]], Complete, FeasibleFound, ExpansionBudget, False))
+        ( Right SearchSummary
+            { summaryCandidates = [[0, 0]]
+            , summaryCoverage = Complete
+            , summaryFeasibility = FeasibleFound
+            , summaryTermination = ExpansionBudget
+            , summaryWitnessesComplete = False
+            }
+        )
         $ Program
         $ alternatives
           >>= fmap (fmap summary)
@@ -252,7 +327,14 @@ paretoExtractionTests =
               result
     , both
         "empty root forest is a complete feasible zero vector at zero budget"
-        (Right ([[0, 0]], Complete, FeasibleFound, SearchExhausted, True))
+        ( Right SearchSummary
+            { summaryCandidates = [[0, 0]]
+            , summaryCoverage = Complete
+            , summaryFeasibility = FeasibleFound
+            , summaryTermination = SearchExhausted
+            , summaryWitnessesComplete = True
+            }
+        )
         $ Program
         $ fmap summary
           <$> extractParetoMany
