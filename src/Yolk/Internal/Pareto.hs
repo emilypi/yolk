@@ -16,17 +16,25 @@
 -- Strict dominance pruning retains equal-vector witnesses until their cap.
 module Yolk.Internal.Pareto
   ( Node (..), Entry (..), Result (..), Termination (..), solve
+  , nodeIdL, nodeChildrenL, nodeCostL, entrySelectionL, entryCostL
+  , resultEntriesL, resultTerminationL, resultExpandedL, resultBoundsL
+  , resultWitnessesCompleteL, resultVectorsCompleteL
+  , _Exhausted, _WorkLimit, _ArchiveLimit
   ) where
 
+import Control.Lens (Lens', Prism', lens, prism')
 import qualified Data.IntMap.Strict as IM
 import qualified Data.IntSet as IS
-import Data.List (minimumBy, sortOn)
+import Data.List (foldl1', minimumBy, sortOn)
 import Data.Maybe (mapMaybe)
 import Data.Ord (comparing)
 import Data.Word (Word64)
 import Numeric.Natural (Natural)
+import qualified Data.Vector as V
 
-type Vector = [Natural]
+-- Boxed vectors retain arbitrary-precision Natural values while repeatedly
+-- traversed cost coordinates use contiguous slots instead of list spines.
+type Vector = V.Vector Natural
 type Selection = IM.IntMap Node
 type Problem = IM.IntMap [Node]
 
@@ -34,7 +42,7 @@ data Node = Node
   { nodeId :: !Int
   , nodeChildren :: !IS.IntSet
   , nodeCost :: !Vector
-  }
+  } deriving (Eq, Show)
 
 data Entry = Entry
   { entrySelection :: !(IM.IntMap Int)
@@ -54,11 +62,49 @@ data Result = Result
 
 data Partial = Partial !Selection !IS.IntSet !Vector
 
+nodeIdL :: Lens' Node Int
+nodeIdL = lens nodeId (\s a -> s {nodeId = a})
+
+nodeChildrenL :: Lens' Node IS.IntSet
+nodeChildrenL = lens nodeChildren (\s a -> s {nodeChildren = a})
+
+nodeCostL :: Lens' Node Vector
+nodeCostL = lens nodeCost (\s a -> s {nodeCost = a})
+
+entrySelectionL :: Lens' Entry (IM.IntMap Int)
+entrySelectionL = lens entrySelection (\s a -> s {entrySelection = a})
+
+entryCostL :: Lens' Entry Vector
+entryCostL = lens entryCost (\s a -> s {entryCost = a})
+
+resultEntriesL :: Lens' Result [Entry]
+resultEntriesL = lens resultEntries (\s a -> s {resultEntries = a})
+
+resultTerminationL :: Lens' Result Termination
+resultTerminationL = lens resultTermination (\s a -> s {resultTermination = a})
+
+resultExpandedL :: Lens' Result Word64
+resultExpandedL = lens resultExpanded (\s a -> s {resultExpanded = a})
+
+resultBoundsL :: Lens' Result [Vector]
+resultBoundsL = lens resultBounds (\s a -> s {resultBounds = a})
+
+resultWitnessesCompleteL :: Lens' Result Bool
+resultWitnessesCompleteL = lens resultWitnessesComplete (\s a -> s {resultWitnessesComplete = a})
+
+resultVectorsCompleteL :: Lens' Result Bool
+resultVectorsCompleteL = lens resultVectorsComplete (\s a -> s {resultVectorsComplete = a})
+
+_Exhausted, _WorkLimit, _ArchiveLimit :: Prism' Termination ()
+_Exhausted = prism' (const Exhausted) $ \case Exhausted -> Just (); _ -> Nothing
+_WorkLimit = prism' (const WorkLimit) $ \case WorkLimit -> Just (); _ -> Nothing
+_ArchiveLimit = prism' (const ArchiveLimit) $ \case ArchiveLimit -> Just (); _ -> Nothing
+
 plus :: Vector -> Vector -> Vector
-plus = zipWith (+)
+plus = V.zipWith (+)
 
 weaklyDominates :: Vector -> Vector -> Bool
-weaklyDominates a b = and (zipWith (<=) a b)
+weaklyDominates a b = V.and (V.zipWith (<=) a b)
 
 strictlyDominates :: Vector -> Vector -> Bool
 strictlyDominates a b = a /= b && weaklyDominates a b
@@ -77,7 +123,7 @@ seed dimensions problem = IM.map fst (loop IM.empty)
     rank (n, estimate) = (sum estimate, nodeId n)
     available known n = do
       children <- traverse (`IM.lookup` known) (IS.toList (nodeChildren n))
-      pure (n, foldl' plus (replicate dimensions 0) (nodeCost n : map snd children))
+      pure (n, foldl' plus (V.replicate dimensions 0) (nodeCost n : map snd children))
 
 closure :: Selection -> IS.IntSet -> Selection
 closure table roots = go IM.empty (IS.toList roots)
@@ -117,7 +163,7 @@ solve dimensions bounds budget archiveLimit witnessLimit original roots
   | not (roots `IS.isSubsetOf` productive) = Result [] Exhausted 0 [] True True
   | otherwise = search 0 initial True [Partial IM.empty roots zero]
   where
-    zero = replicate dimensions 0
+    zero = V.replicate dimensions 0
     feasible cost = maybe True (weaklyDominates cost) bounds
     noSelf = IM.mapWithKey (\owner -> filter (not . IS.member owner . nodeChildren)) original
     witnesses = seed dimensions noSelf
@@ -125,7 +171,7 @@ solve dimensions bounds budget archiveLimit witnessLimit original roots
     live = IM.map (filter ((`IS.isSubsetOf` productive) . nodeChildren))
       (IM.restrictKeys noSelf productive)
     problem = IM.restrictKeys live (reachable live roots)
-    minima = IM.map (foldl1 (zipWith min) . map nodeCost) problem
+    minima = IM.map (foldl1' (V.zipWith min) . map nodeCost) problem
     chosen = closure witnesses roots
     first = Entry (IM.map nodeId chosen) (foldl' plus zero (map nodeCost (IM.elems chosen)))
     initial = [first | feasible (entryCost first)]
@@ -139,7 +185,7 @@ solve dimensions bounds budget archiveLimit witnessLimit original roots
     -- One componentwise envelope bounds every unexplored completion. This
     -- deliberately avoids an unbounded result list of pending search states.
     pendingBounds [] = []
-    pendingBounds states = [foldl1 (zipWith min) (map lower states)]
+    pendingBounds states = [foldl1' (V.zipWith min) (map lower states)]
 
     finish n stop complete archive pending = Result
       (sortOn (\e -> (entryCost e, IM.toAscList (entrySelection e))) archive)

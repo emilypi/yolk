@@ -251,9 +251,10 @@ Term and pattern optics preserve sorts. Graph identities and snapshots
 stay opaque; changed rewrite bodies must pass through `rewrite` again.
 For DAG extraction, `O.expansionLimit` is a lens and `O._Optimal` /
 `O._Unproven` are prisms. `O.dag`, `O.dagCost`, `O.lowerBound`,
-`O.optimality`, `O.expansions`, `O.dagNode` and `O.dagNodeId` are getters:
-results and nodes cannot be edited in ways that invalidate their cost
-certificates or sharing. For example, `result ^? O.optimality . O._Optimal`
+`O.optimality` and `O.expansions` are lenses over result record fields.
+Editing those records does not revalidate their evidence. `O.dagNode` and
+`O.dagNodeId` remain getters so graph structure and sharing stay protected.
+For example, `result ^? O.optimality . O._Optimal`
 checks the proof status, and `result ^. O.dag . O.dagNode` reads the root.
 
 ## Rebuilding, snapshots, and pruning
@@ -326,6 +327,19 @@ let options = (defaultParetoOptions 2)
 portfolio <- extractParetoMany options cost roots
 ```
 
+`parseParetoOptions` constructs an opaque bounded configuration. Extraction
+uses this boundary automatically, including after raw option record updates.
+`parsedParetoOptions` is a getter optic that recovers editable raw options.
+For example, `parseParetoOptions (options & O.paretoDimensions .~ 0)` rejects
+the invalid edit. The archive/witness product is validated together, and
+upper bounds must match the dimension and input precision limits.
+
+Candidates, Pareto results and scalar DAG results use named record selectors.
+`Yolk.Optics` provides their field lenses, option lenses, and status/error
+prisms. These support ordinary user edits; vector costs and completeness
+claims describe the original extractor-produced record. A record edit does
+not rerun extraction, prove a new fact, or update related evidence fields.
+
 `cost :: forall s. l s (Const ()) -> [Natural]` must return exactly the declared
 number of coordinates. Inputs, constants and other leaves cost whatever the
 caller assigns. Coordinates are structural model units: depth, routing,
@@ -350,6 +364,8 @@ ranges return `ParetoError`; they never become favorable cost estimates.
 
 The search limits bound input rows, roots, dimensions, cost precision, retained
 vectors and witnesses. Exact accumulated `Natural` totals do not overflow.
+The search uses boxed `Vector Natural` coordinates for repeated arithmetic
+and dominance traversals; the public model and results retain list syntax.
 An expansion budget is not a wall-clock limit: snapshot construction, seeding,
 successor generation, and reconstruction also take work. Callers evaluating
 untrusted languages need cancellation and process-level resource limits.
@@ -366,7 +382,7 @@ on both backends, including a point no weighted scalar objective selects.
 These are demonstrative model costs, not measured circuit improvements.
 
 All library modules are exposed through Cabal. Graph identities, live graph
-state, immutable snapshots, validated rewrites, DAGs and Pareto result constructors remain opaque
+state, immutable snapshots, validated rewrites, DAGs and parsed option constructors remain opaque
 in their defining modules. Internal snapshot inspection returns immutable
 values through ordinary functions rather than record selectors that permit
 unchecked record updates.

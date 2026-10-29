@@ -149,9 +149,10 @@ algebra once per reachable node. IDs are meaningful only within one
 extraction result. A typed reconstruction inconsistency reports
 `InvalidExtraction`, distinct from the normal absence of a finite witness.
 
-`DagResult` is opaque: its feasible output, incumbent cost, lower bound,
-proof status, and expansion count have read-only accessors and `lens`
-getters. Only `DagLimits.expansionLimit` has a writable lens. `Optimal`
+`DagResult` uses named record fields for its feasible output, incumbent cost,
+lower bound, proof status and expansion count, with `lens` lenses.
+Edits are ordinary user changes and do not revalidate the certificate. For
+an extractor-produced result, `Optimal`
 means lower bound equals cost; `Unproven` retains the incumbent without
 claiming a proof. The entire result concerns the current visible e-graph,
 not equalities a future saturation run might discover.
@@ -265,10 +266,16 @@ vectors or equal-vector witnesses. Inclusive upper bounds prune only when the
 lower bound already violates a constraint.
 
 `Yolk.Internal.Pareto` operates on immutable sort-erased choices.
-`Yolk.Extract.Pareto` validates dimensions and limits, freezes the live graph,
+`Yolk.Extract.Pareto` parses dimensions and limits into an opaque bounded
+configuration, freezes the live graph,
 and reconstructs each candidate through `Yolk.Dag`'s checked constructor.
 The constructor checks visibility, selected-class membership, sorts and cycles.
-The public result cannot be edited to invalidate its vector/evidence fields.
+Public candidates and results are named records with field lenses. Their
+evidence applies to the extractor-produced values; callers can edit these
+records, but doing so does not revalidate costs or completeness claims.
+The solver uses boxed `Vector Natural` coordinates for repeated arithmetic
+and dominance checks, while the public boundary keeps list-based costs.
+Componentwise reductions use strict folds, including minima and pending bounds.
 A snapshot selection asserts no semantic fact beyond the graph's equalities;
 proof-producing rewrite explanations remain a separate outstanding feature.
 

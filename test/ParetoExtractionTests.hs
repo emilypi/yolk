@@ -10,7 +10,9 @@
 --
 module ParetoExtractionTests (paretoExtractionTests) where
 
+import qualified Control.Lens as Lens
 import Control.Monad (foldM, forM, forM_, void)
+import Data.Either (isLeft)
 import Data.Functor.Const (Const (..))
 import Data.HKD (FFoldable (..), FFunctor (..), FTraversable (..), ffoldMapDefault, ffmapDefault)
 import qualified Data.IntMap.Strict as IM
@@ -19,6 +21,7 @@ import Data.List (nub, sort)
 import Data.Maybe (mapMaybe)
 import Numeric.Natural (Natural)
 import Test.Tasty (TestTree, testGroup)
+import Test.Tasty.HUnit (assertBool, assertEqual, testCase)
 import qualified Test.Tasty.QuickCheck as QC
 import TestLanguage
 import TestSupport
@@ -48,7 +51,31 @@ summary result = (map candidateCost (paretoCandidates result), paretoCoverage re
 
 paretoExtractionTests :: TestTree
 paretoExtractionTests = testGroup "shared Pareto extraction"
-  [ both "retains a nonconvex tradeoff missed by weighted sums"
+  [ testCase "option parsing enforces every scalar and combined boundary" $ do
+      let invalid =
+            [ exact {paretoDimensions = 0}, exact {paretoDimensions = 65}
+            , exact {paretoArchiveLimit = 0}, exact {paretoArchiveLimit = 1000001}
+            , exact {paretoWitnessLimit = -1}, exact {paretoWitnessLimit = 1000001}
+            , exact {paretoNodeLimit = 0}, exact {paretoNodeLimit = 1000001}
+            , exact {paretoRootLimit = 0}, exact {paretoRootLimit = 1000001}
+            , exact {paretoCostBitLimit = 0}, exact {paretoCostBitLimit = 65537}
+            , exact {paretoArchiveLimit = 1001, paretoWitnessLimit = 1000}
+            , exact {paretoUpperBounds = Just [1]}
+            , exact {paretoUpperBounds = Just (repeat 0)}
+            , exact {paretoCostBitLimit = 1, paretoUpperBounds = Just [0, 2]}
+            ]
+          valid =
+            [ exact
+            , (defaultParetoOptions 1) {paretoArchiveLimit = 1, paretoWitnessLimit = 1000000}
+            , (defaultParetoOptions 64) {paretoArchiveLimit = 1000000, paretoWitnessLimit = 1,
+                paretoNodeLimit = 1000000, paretoRootLimit = 1000000,
+                paretoCostBitLimit = 65536, paretoUpperBounds = Just (replicate 64 0),
+                paretoExpansionLimit = Just 0}
+            ]
+      forM_ invalid $ \options -> assertBool "invalid configuration" (isLeft (parseParetoOptions options))
+      forM_ valid $ \options -> assertEqual "parsed options round trip"
+        (Right options) (Lens.view parsedParetoOptions <$> parseParetoOptions options)
+  , both "retains a nonconvex tradeoff missed by weighted sums"
       (Right ([[1, 6], [4, 4], [6, 1]], Complete, FeasibleFound, SearchExhausted, True)) $
       Program $ alternatives >>= fmap (fmap summary) . extractPareto exact tradeoff
   , both "hard upper bounds retain the feasible middle alternative"

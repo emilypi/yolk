@@ -16,6 +16,7 @@
 -- dominance API: Pareto order is never disguised as a total 'Ord' instance.
 module Yolk.Extract.Pareto
   ( ParetoCost, ParetoOptions (..), defaultParetoOptions, ParetoError (..)
+  , ParsedParetoOptions, parseParetoOptions, parsedParetoOptions
   , ParetoCoverage (..), ParetoFeasibility (..), ParetoTermination (..)
   , ParetoResult, ParetoCandidate, paretoCandidates, candidateValue, candidateCost
   , paretoCoverage, paretoFeasibility, paretoTermination, paretoExpansions
@@ -23,12 +24,14 @@ module Yolk.Extract.Pareto
   , extractParetoMany, extractPareto
   ) where
 
+import Control.Lens (Getter, to)
 import Control.Monad (unless)
 import Data.Functor.Const (Const (..))
 import Data.HKD (FFunctor (..), FFoldable (..), FTraversable (..))
 import qualified Data.IntMap.Strict as IM
 import qualified Data.IntSet as IS
 import Data.Word (Word64)
+import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 import Yolk.Backend (Backend)
 import Yolk.Dag (Dag, dagFromSelection)
@@ -69,43 +72,62 @@ data ParetoCoverage = Complete | Partial | Approximate deriving (Eq, Show)
 data ParetoFeasibility = FeasibleFound | NoFeasibleFoundYet | ProvenInfeasible deriving (Eq, Show)
 data ParetoTermination = SearchExhausted | ExpansionBudget | ArchiveBudget deriving (Eq, Show)
 
--- | An immutable selected forest and its exact additive vector. This vector
+-- | A selected forest and its exact additive vector. This vector
 -- describes the supplied extraction model, not a downstream reconstructed or
--- physically mapped circuit. There is intentionally no Functor instance.
-data ParetoCandidate a = ParetoCandidate !a ![Natural]
+-- physically mapped circuit. Record updates are ordinary user edits: evidence
+-- describes the original extractor-produced value, not a modified record.
+data ParetoCandidate a = ParetoCandidate
+  { candidateValue :: !a
+  , candidateCost :: ![Natural]
+  } deriving (Eq, Show)
 type role ParetoCandidate nominal
 
-candidateValue :: ParetoCandidate a -> a
-candidateValue (ParetoCandidate value _) = value
-
-candidateCost :: ParetoCandidate a -> [Natural]
-candidateCost (ParetoCandidate _ cost) = cost
-
+-- | Search evidence for the original extraction. Selectors permit ordinary
+-- record updates; editing results does not rerun extraction or validate them.
 data ParetoResult a = ParetoResult
-  ![ParetoCandidate a] !ParetoCoverage !ParetoFeasibility !ParetoTermination
-  !Word64 ![[Natural]] !Bool
+  { paretoCandidates :: ![ParetoCandidate a]
+  , paretoCoverage :: !ParetoCoverage
+  , paretoFeasibility :: !ParetoFeasibility
+  , paretoTermination :: !ParetoTermination
+  , paretoExpansions :: !Word64
+  -- | At most one componentwise lower envelope for unresolved branches.
+  -- Coordinates need not be jointly attainable. No pending branches is not
+  -- a certificate that every equivalent circuit has been searched.
+  , paretoPendingBounds :: ![[Natural]]
+  , paretoWitnessesComplete :: !Bool
+  } deriving (Eq, Show)
 type role ParetoResult nominal
 
-paretoCandidates :: ParetoResult a -> [ParetoCandidate a]
-paretoCandidates (ParetoResult value _ _ _ _ _ _) = value
-paretoCoverage :: ParetoResult a -> ParetoCoverage
-paretoCoverage (ParetoResult _ value _ _ _ _ _) = value
-paretoFeasibility :: ParetoResult a -> ParetoFeasibility
-paretoFeasibility (ParetoResult _ _ value _ _ _ _) = value
-paretoTermination :: ParetoResult a -> ParetoTermination
-paretoTermination (ParetoResult _ _ _ value _ _ _) = value
-paretoExpansions :: ParetoResult a -> Word64
-paretoExpansions (ParetoResult _ _ _ _ value _ _) = value
--- | At most one componentwise lower envelope for all unresolved branches.
--- Coordinates need not be jointly attainable. An empty list means no pending
--- branches, not a certificate that every equivalent circuit was searched.
-paretoPendingBounds :: ParetoResult a -> [[Natural]]
-paretoPendingBounds (ParetoResult _ _ _ _ _ value _) = value
-paretoWitnessesComplete :: ParetoResult a -> Bool
-paretoWitnessesComplete (ParetoResult _ _ _ _ _ _ value) = value
+-- | Parsed bounded configuration. Construction validates every field and the
+-- archive/witness product together. Private fields keep this construction
+-- boundary intact; 'parsedParetoOptions' is a read-only optic of raw options.
+data ParsedParetoOptions = ParsedParetoOptions
+  { parsedDimensions :: !Int
+  , parsedUpperBounds :: !(Maybe (V.Vector Natural))
+  , parsedExpansionLimit :: !(Maybe Word64)
+  , parsedArchiveLimit :: !Int
+  , parsedWitnessLimit :: !Int
+  , parsedNodeLimit :: !Int
+  , parsedRootLimit :: !Int
+  , parsedCostBitLimit :: !Int
+  } deriving (Eq, Show)
 
-validateOptions :: ParetoOptions -> Either ParetoError ()
-validateOptions options = do
+-- | Inspect a parsed configuration as editable raw options. Editing those
+-- options requires parsing them again before the extractor consumes them.
+parsedParetoOptions :: Getter ParsedParetoOptions ParetoOptions
+parsedParetoOptions = to $ \options -> ParetoOptions
+  { paretoDimensions = parsedDimensions options
+  , paretoUpperBounds = fmap V.toList (parsedUpperBounds options)
+  , paretoExpansionLimit = parsedExpansionLimit options
+  , paretoArchiveLimit = parsedArchiveLimit options
+  , paretoWitnessLimit = parsedWitnessLimit options
+  , paretoNodeLimit = parsedNodeLimit options
+  , paretoRootLimit = parsedRootLimit options
+  , paretoCostBitLimit = parsedCostBitLimit options
+  }
+
+parseParetoOptions :: ParetoOptions -> Either ParetoError ParsedParetoOptions
+parseParetoOptions options = do
   bounded "dimensions" 64 (paretoDimensions options)
   bounded "archive limit" 1000000 (paretoArchiveLimit options)
   bounded "witness limit" 1000000 (paretoWitnessLimit options)
@@ -114,20 +136,25 @@ validateOptions options = do
   bounded "cost bit limit" 65536 (paretoCostBitLimit options)
   unless (toInteger (paretoArchiveLimit options) * toInteger (paretoWitnessLimit options) <= 1000000)
     (Left (InvalidParetoOptions "archive/witness product exceeds 1000000"))
-  maybe (pure ()) (fmap (const ()) . validateVector options) (paretoUpperBounds options)
+  let parsed = ParsedParetoOptions
+        (paretoDimensions options) Nothing (paretoExpansionLimit options)
+        (paretoArchiveLimit options) (paretoWitnessLimit options)
+        (paretoNodeLimit options) (paretoRootLimit options) (paretoCostBitLimit options)
+  bounds <- traverse (parseVector parsed) (paretoUpperBounds options)
+  pure parsed {parsedUpperBounds = bounds}
   where
     bounded label upper value = unless (value > 0 && value <= upper)
       (Left (InvalidParetoOptions (label ++ " must be between 1 and " ++ show upper)))
 
-validateVector :: ParetoOptions -> [Natural] -> Either ParetoError [Natural]
-validateVector options raw = do
-  let dimension = paretoDimensions options
+parseVector :: ParsedParetoOptions -> [Natural] -> Either ParetoError (V.Vector Natural)
+parseVector options raw = do
+  let dimension = parsedDimensions options
       vector = take (dimension + 1) raw
   unless (length vector == dimension)
     (Left (ObjectiveDimensionMismatch dimension (length vector)))
-  unless (all (< (2 ^ paretoCostBitLimit options :: Natural)) vector)
+  unless (all (< (2 ^ parsedCostBitLimit options :: Natural)) vector)
     (Left (ParetoInputLimit "objective or bound exceeds the input bit limit"))
-  pure vector
+  pure (V.fromList vector)
 
 -- | Select one visible representative per reachable canonical e-class. Upper
 -- bounds are inclusive. A work cap may still prove vector completeness from
@@ -137,21 +164,21 @@ validateVector options raw = do
 extractParetoMany :: (Backend b m, Language l, FTraversable roots)
   => ParetoOptions -> ParetoCost l -> roots (ClassId r)
   -> EGraphT b r l m (Either ParetoError (ParetoResult (roots (Dag l))))
-extractParetoMany options model requested = case validateOptions options of
+extractParetoMany rawOptions model requested = case parseParetoOptions rawOptions of
   Left err -> pure (Left err)
-  Right () -> do
+  Right options -> do
     count <- nodeCount
-    if count > paretoNodeLimit options
+    if count > parsedNodeLimit options
       then pure (Left (ParetoInputLimit "graph node limit exceeded before snapshot"))
-      else if length (take (paretoRootLimit options + 1) (ffoldMap (const [()]) requested))
-          > paretoRootLimit options
+      else if length (take (parsedRootLimit options + 1) (ffoldMap (const [()]) requested))
+          > parsedRootLimit options
         then pure (Left (ParetoInputLimit "root position limit exceeded"))
         else do
           snap <- freeze
           roots <- ftraverse findClass requested
           let rows = [(ident, original, n) | (ident, n@(Stored _ original _ True)) <- IM.toAscList (snapshotRows snap)]
               convert (ident, original, Stored _ _ n _) = do
-                weight <- validateVector options (model (erase n))
+                weight <- parseVector options (model (erase n))
                 case IM.lookup original (snapshotRoots snap) of
                   Nothing -> Left (ParetoInputLimit "snapshot class is missing")
                   Just owner -> Right (owner, [Search.Node ident (ffoldMap childSet n) weight])
@@ -159,19 +186,19 @@ extractParetoMany options model requested = case validateOptions options of
           case traverse convert rows of
             Left err -> pure (Left err)
             Right converted -> do
-              let result = Search.solve (paretoDimensions options) (paretoUpperBounds options)
-                    (paretoExpansionLimit options) (paretoArchiveLimit options) (paretoWitnessLimit options)
+              let result = Search.solve (parsedDimensions options) (parsedUpperBounds options)
+                    (parsedExpansionLimit options) (parsedArchiveLimit options) (parsedWitnessLimit options)
                     (IM.fromListWith (++) converted) (ffoldMap childSet roots)
                   reconstruct entry = do
                     forest <- dagFromSelection snap (Search.entrySelection entry) roots
-                    pure (ParetoCandidate forest (Search.entryCost entry))
+                    pure (ParetoCandidate forest (V.toList (Search.entryCost entry)))
               case traverse reconstruct (Search.resultEntries result) of
                 Nothing -> throwGraph InvalidExtraction
                 Just candidates -> pure (Right (fromSearch result candidates))
 
 fromSearch :: Search.Result -> [ParetoCandidate a] -> ParetoResult a
 fromSearch result candidates = ParetoResult candidates coverage feasibility termination
-  (Search.resultExpanded result) (Search.resultBounds result) (Search.resultWitnessesComplete result)
+  (Search.resultExpanded result) (map V.toList (Search.resultBounds result)) (Search.resultWitnessesComplete result)
   where
     termination = case Search.resultTermination result of
       Search.Exhausted -> SearchExhausted

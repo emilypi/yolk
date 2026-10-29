@@ -50,7 +50,8 @@ library
     hkd == 0.2.1,
     lens >= 5.3 && < 5.4,
     primitive >= 0.9 && < 0.10,
-    transformers >= 0.6 && < 0.7
+    transformers >= 0.6 && < 0.7,
+    vector >= 0.13 && < 0.14
 
 test-suite yolk-tests
   import: settings

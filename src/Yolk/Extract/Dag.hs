@@ -61,24 +61,15 @@ data Optimality = Optimal | Unproven
 
 -- | A feasible result with a cost certificate in the saturated Word64 domain:
 -- @lowerBound <= optimum <= dagCost@. 'Optimal' means both bounds coincide.
--- Constructors are private so edits cannot invalidate the certificate.
+-- The certificate describes an extractor-produced result. Selectors support
+-- ordinary record updates; editing a record does not revalidate its evidence.
 data DagResult a = DagResult
-  !a {-# UNPACK #-} !Word64 {-# UNPACK #-} !Word64 !Optimality {-# UNPACK #-} !Word64
-
-dag :: DagResult a -> a
-dag (DagResult value _ _ _ _) = value
-
-dagCost :: DagResult a -> Word64
-dagCost (DagResult _ value _ _ _) = value
-
-lowerBound :: DagResult a -> Word64
-lowerBound (DagResult _ _ value _ _) = value
-
-optimality :: DagResult a -> Optimality
-optimality (DagResult _ _ _ value _) = value
-
-expansions :: DagResult a -> Word64
-expansions (DagResult _ _ _ _ value) = value
+  { dag :: !a
+  , dagCost :: {-# UNPACK #-} !Word64
+  , lowerBound :: {-# UNPACK #-} !Word64
+  , optimality :: !Optimality
+  , expansions :: {-# UNPACK #-} !Word64
+  } deriving (Eq, Show)
 
 newtype One s f = One { getOne :: f s }
 

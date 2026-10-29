@@ -16,7 +16,7 @@ for fixture in SortMismatch CoerceSort GraphRegion EscapeRegion TermOpticSort Pa
   fi
   printf 'PASS: %s rejected at the type boundary\n' "$fixture"
 done
-for fixture in InternalClassConstructor InternalSnapshotConstructor InternalSnapshotUpdate RewriteConstructor; do
+for fixture in InternalClassConstructor InternalSnapshotConstructor InternalSnapshotUpdate RewriteConstructor ParsedParetoOptionsConstructor ParsedParetoOptionsUpdate; do
   if cabal exec --offline -- ghc -fno-code -XGHC2024 -package yolk \
       "test/compile-fail/$fixture.hs" > "$type_check_dir/$fixture.log" 2>&1; then
     printf 'FAIL: %s unexpectedly compiled\n' "$fixture"

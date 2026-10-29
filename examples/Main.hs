@@ -302,7 +302,8 @@ paretoExample = do
   multiplication <- addTerm (term (Mul (term (Lit 2)) (term (Lit 3))))
   void (union literal addition)
   void (union literal multiplication)
-  result <- extractPareto ((defaultParetoOptions 2) {paretoExpansionLimit = Nothing}) weight literal
+  let options = defaultParetoOptions 2 & O.paretoExpansionLimit .~ Nothing
+  result <- extractPareto options weight literal
   pure $ fmap (\r -> (paretoCoverage r,
     [(candidateCost c, pretty (dagToTerm (candidateValue c))) | c <- paretoCandidates r])) result
   where

@@ -30,13 +30,27 @@ module Yolk.Optics
   , _InvalidLimits, _InvalidBinding, _CostOverflow
   , expansionLimit, dag, dagCost, lowerBound, optimality, expansions
   , dagNode, dagNodeId, _Optimal, _Unproven, _InvalidExtraction
+  , paretoDimensions, paretoUpperBounds, paretoExpansionLimit
+  , paretoArchiveLimit, paretoWitnessLimit, paretoNodeLimit, paretoRootLimit, paretoCostBitLimit
+  , candidateValue, candidateCost, paretoCandidates, paretoCoverage, paretoFeasibility
+  , paretoTermination, paretoExpansions, paretoPendingBounds, paretoWitnessesComplete
+  , parsedParetoOptions
+  , _Complete, _Partial, _Approximate, _FeasibleFound, _NoFeasibleFoundYet, _ProvenInfeasible
+  , _SearchExhausted, _ExpansionBudget, _ArchiveBudget
+  , _InvalidParetoOptions, _ObjectiveDimensionMismatch, _ParetoInputLimit
+  , classIdRep, classIdIndex, snapshotRoots, snapshotRows
   ) where
 
 import Control.Lens (Getter, Iso', Lens', Prism', iso, lens, prism', to)
 import Data.Word (Word64)
-import Type.Reflection (Typeable)
+import qualified Data.IntMap.Strict as IM
+import Numeric.Natural (Natural)
+import Type.Reflection (Typeable, TypeRep)
 import qualified Yolk.Extract.Dag as D
+import qualified Yolk.Extract.Pareto as P
+import Yolk.Extract.Pareto (parsedParetoOptions)
 import Yolk.Internal.Types
+import qualified Yolk.Internal.Graph as G
 import Yolk.Rewrite (_Var, _Node, rewriteName)
 import qualified Yolk.Rewrite as R
 
@@ -126,25 +140,26 @@ _CostOverflow = prism' (const CostOverflow) $ \case
   _ -> Nothing
 
 -- | Change the deterministic DAG search budget; Nothing requests an
--- unbounded search. Result and node optics below are read-only so the
--- optimality certificate, sharing, and acyclicity cannot be invalidated.
+-- unbounded search. Result fields support ordinary edits; they do not
+-- revalidate evidence. DAG node optics remain read-only to preserve sharing
+-- and acyclicity.
 expansionLimit :: Lens' D.DagLimits (Maybe Word64)
 expansionLimit = lens D.expansionLimit (\s a -> s { D.expansionLimit = a })
 
-dag :: Getter (D.DagResult a) a
-dag = to D.dag
+dag :: Lens' (D.DagResult a) a
+dag = lens D.dag (\s a -> s { D.dag = a })
 
-dagCost :: Getter (D.DagResult a) Word64
-dagCost = to D.dagCost
+dagCost :: Lens' (D.DagResult a) Word64
+dagCost = lens D.dagCost (\s a -> s { D.dagCost = a })
 
-lowerBound :: Getter (D.DagResult a) Word64
-lowerBound = to D.lowerBound
+lowerBound :: Lens' (D.DagResult a) Word64
+lowerBound = lens D.lowerBound (\s a -> s { D.lowerBound = a })
 
-optimality :: Getter (D.DagResult a) D.Optimality
-optimality = to D.optimality
+optimality :: Lens' (D.DagResult a) D.Optimality
+optimality = lens D.optimality (\s a -> s { D.optimality = a })
 
-expansions :: Getter (D.DagResult a) Word64
-expansions = to D.expansions
+expansions :: Lens' (D.DagResult a) Word64
+expansions = lens D.expansions (\s a -> s { D.expansions = a })
 
 dagNode :: Getter (D.Dag l s) (l s (D.Dag l))
 dagNode = to D.dagNode
@@ -166,3 +181,95 @@ _InvalidExtraction :: Prism' EGraphError ()
 _InvalidExtraction = prism' (const InvalidExtraction) $ \case
   InvalidExtraction -> Just ()
   _ -> Nothing
+
+-- | Raw Pareto configuration lenses. Extraction parses edited options again.
+paretoDimensions :: Lens' P.ParetoOptions Int
+paretoDimensions = lens P.paretoDimensions (\s a -> s { P.paretoDimensions = a })
+
+paretoUpperBounds :: Lens' P.ParetoOptions (Maybe [Natural])
+paretoUpperBounds = lens P.paretoUpperBounds (\s a -> s { P.paretoUpperBounds = a })
+
+paretoExpansionLimit :: Lens' P.ParetoOptions (Maybe Word64)
+paretoExpansionLimit = lens P.paretoExpansionLimit (\s a -> s { P.paretoExpansionLimit = a })
+
+paretoArchiveLimit :: Lens' P.ParetoOptions Int
+paretoArchiveLimit = lens P.paretoArchiveLimit (\s a -> s { P.paretoArchiveLimit = a })
+
+paretoWitnessLimit :: Lens' P.ParetoOptions Int
+paretoWitnessLimit = lens P.paretoWitnessLimit (\s a -> s { P.paretoWitnessLimit = a })
+
+paretoNodeLimit :: Lens' P.ParetoOptions Int
+paretoNodeLimit = lens P.paretoNodeLimit (\s a -> s { P.paretoNodeLimit = a })
+
+paretoRootLimit :: Lens' P.ParetoOptions Int
+paretoRootLimit = lens P.paretoRootLimit (\s a -> s { P.paretoRootLimit = a })
+
+paretoCostBitLimit :: Lens' P.ParetoOptions Int
+paretoCostBitLimit = lens P.paretoCostBitLimit (\s a -> s { P.paretoCostBitLimit = a })
+
+candidateValue :: Lens' (P.ParetoCandidate a) a
+candidateValue = lens P.candidateValue (\s a -> s { P.candidateValue = a })
+
+candidateCost :: Lens' (P.ParetoCandidate a) [Natural]
+candidateCost = lens P.candidateCost (\s a -> s { P.candidateCost = a })
+
+paretoCandidates :: Lens' (P.ParetoResult a) [P.ParetoCandidate a]
+paretoCandidates = lens P.paretoCandidates (\s a -> s { P.paretoCandidates = a })
+
+paretoCoverage :: Lens' (P.ParetoResult a) P.ParetoCoverage
+paretoCoverage = lens P.paretoCoverage (\s a -> s { P.paretoCoverage = a })
+
+paretoFeasibility :: Lens' (P.ParetoResult a) P.ParetoFeasibility
+paretoFeasibility = lens P.paretoFeasibility (\s a -> s { P.paretoFeasibility = a })
+
+paretoTermination :: Lens' (P.ParetoResult a) P.ParetoTermination
+paretoTermination = lens P.paretoTermination (\s a -> s { P.paretoTermination = a })
+
+paretoExpansions :: Lens' (P.ParetoResult a) Word64
+paretoExpansions = lens P.paretoExpansions (\s a -> s { P.paretoExpansions = a })
+
+paretoPendingBounds :: Lens' (P.ParetoResult a) [[Natural]]
+paretoPendingBounds = lens P.paretoPendingBounds (\s a -> s { P.paretoPendingBounds = a })
+
+paretoWitnessesComplete :: Lens' (P.ParetoResult a) Bool
+paretoWitnessesComplete = lens P.paretoWitnessesComplete (\s a -> s { P.paretoWitnessesComplete = a })
+
+_Complete, _Partial, _Approximate :: Prism' P.ParetoCoverage ()
+_Complete = prism' (const P.Complete) $ \case P.Complete -> Just (); _ -> Nothing
+_Partial = prism' (const P.Partial) $ \case P.Partial -> Just (); _ -> Nothing
+_Approximate = prism' (const P.Approximate) $ \case P.Approximate -> Just (); _ -> Nothing
+
+_FeasibleFound, _NoFeasibleFoundYet, _ProvenInfeasible :: Prism' P.ParetoFeasibility ()
+_FeasibleFound = prism' (const P.FeasibleFound) $ \case P.FeasibleFound -> Just (); _ -> Nothing
+_NoFeasibleFoundYet = prism' (const P.NoFeasibleFoundYet) $ \case P.NoFeasibleFoundYet -> Just (); _ -> Nothing
+_ProvenInfeasible = prism' (const P.ProvenInfeasible) $ \case P.ProvenInfeasible -> Just (); _ -> Nothing
+
+_SearchExhausted, _ExpansionBudget, _ArchiveBudget :: Prism' P.ParetoTermination ()
+_SearchExhausted = prism' (const P.SearchExhausted) $ \case P.SearchExhausted -> Just (); _ -> Nothing
+_ExpansionBudget = prism' (const P.ExpansionBudget) $ \case P.ExpansionBudget -> Just (); _ -> Nothing
+_ArchiveBudget = prism' (const P.ArchiveBudget) $ \case P.ArchiveBudget -> Just (); _ -> Nothing
+
+_InvalidParetoOptions :: Prism' P.ParetoError String
+_InvalidParetoOptions = prism' P.InvalidParetoOptions $ \case P.InvalidParetoOptions message -> Just message; _ -> Nothing
+
+_ObjectiveDimensionMismatch :: Prism' P.ParetoError (Int, Int)
+_ObjectiveDimensionMismatch = prism' (uncurry P.ObjectiveDimensionMismatch) $ \case
+  P.ObjectiveDimensionMismatch expected actual -> Just (expected, actual)
+  _ -> Nothing
+
+_ParetoInputLimit :: Prism' P.ParetoError String
+_ParetoInputLimit = prism' P.ParetoInputLimit $ \case P.ParetoInputLimit message -> Just message; _ -> Nothing
+
+-- | Identity and snapshot inspection remains read-only: editing these
+-- representations could bypass graph-region and reconstruction checks.
+classIdRep :: Getter (G.ClassId r s) (TypeRep s)
+classIdRep = to G.classIdRep
+
+classIdIndex :: Getter (G.ClassId r s) Int
+classIdIndex = to G.classIdIndex
+
+snapshotRoots :: Getter (G.Snapshot r l) (IM.IntMap Int)
+snapshotRoots = to G.snapshotRoots
+
+snapshotRows :: Getter (G.Snapshot r l) (IM.IntMap (G.Stored r l))
+snapshotRows = to G.snapshotRows
