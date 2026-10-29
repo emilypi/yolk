@@ -19,10 +19,7 @@ module Yolk.Extract.Pareto
   , ParetoOptions (..)
   , defaultParetoOptions
   , ParetoError (..)
-  , ParetoErrors (..)
-  , _ParetoErrors
   , ParsedParetoOptions
-  , validateParetoOptions
   , parseParetoOptions
   , parsedParetoOptions
   , ParetoCoverage (..)
@@ -50,9 +47,6 @@ import Data.Functor.Const (Const (..))
 import Data.HKD (FFoldable (..), FFunctor (..), FTraversable (..))
 import Data.IntMap.Strict qualified as IM
 import Data.IntSet qualified as IS
-import Data.List.NonEmpty (NonEmpty (..))
-import Data.List.NonEmpty qualified as NE
-import Data.Validation (Validation (..), foldValidation)
 import Data.Vector qualified as V
 import Data.Word (Word64)
 import Numeric.Natural (Natural)
@@ -162,54 +156,34 @@ parsedParetoOptions = to $ \options ->
     , paretoCostBitLimit = parsedCostBitLimit options
     }
 
--- | Accumulate independent configuration errors in field order, followed by
--- product and vector errors. Dependent checks run only when their own
--- prerequisites are valid, even if another independent field has failed.
-validateParetoOptions :: ParetoOptions -> Validation ParetoErrors ParsedParetoOptions
-validateParetoOptions options =
-  build <$> dimensions <*> archive <*> witnesses <*> nodes <*> roots <*> precision
-    <* productCheck
-    <*> bounds
- where
-  dimensions = bounded "dimensions" 64 (paretoDimensions options)
-  archive = bounded "archive limit" 1000000 (paretoArchiveLimit options)
-  witnesses = bounded "witness limit" 1000000 (paretoWitnessLimit options)
-  nodes = bounded "node limit" 1000000 (paretoNodeLimit options)
-  roots = bounded "root limit" 1000000 (paretoRootLimit options)
-  precision = bounded "cost bit limit" 65536 (paretoCostBitLimit options)
-  build dimensionCount archiveLimit witnessLimit nodeLimit rootLimit bitLimit upper =
-    ParsedParetoOptions
-      { parsedDimensions = dimensionCount
-      , parsedUpperBounds = upper
-      , parsedExpansionLimit = paretoExpansionLimit options
-      , parsedArchiveLimit = archiveLimit
-      , parsedWitnessLimit = witnessLimit
-      , parsedNodeLimit = nodeLimit
-      , parsedRootLimit = rootLimit
-      , parsedCostBitLimit = bitLimit
-      }
-  bounded label upper value
-    | value > 0 && value <= upper = Success value
-    | otherwise = invalid $
-        InvalidParetoOptions (label ++ " must be between 1 and " ++ show upper)
-  productCheck = case (archive, witnesses) of
-    (Success a, Success w)
-      | toInteger a * toInteger w > 1000000 ->
-          invalid (InvalidParetoOptions "archive/witness product exceeds 1000000")
-    _ -> Success ()
-  bounds = case (dimensions, precision) of
-    (Success d, Success p) ->
-      traverse (either invalid Success . parseVectorWith d p) (paretoUpperBounds options)
-    -- Failed prerequisites are already reported by their field validators.
-    -- Do not inspect a vector using unchecked dimensions or exponent bounds.
-    _ -> Success Nothing
-  invalid err = Failure (ParetoErrors (err :| []))
-
--- | Compatibility parser retaining the first error. Use 'validateParetoOptions'
--- when a caller can present all independent configuration failures together.
+-- | Parse raw options into a bounded configuration, stopping at the first
+-- error. Check dimensions and precision before inspecting upper bounds.
 parseParetoOptions :: ParetoOptions -> Either ParetoError ParsedParetoOptions
-parseParetoOptions =
-  foldValidation (Left . NE.head . getParetoErrors) Right . validateParetoOptions
+parseParetoOptions options = do
+  dimensions <- bounded "dimensions" 64 (paretoDimensions options)
+  archive <- bounded "archive limit" 1000000 (paretoArchiveLimit options)
+  witnesses <- bounded "witness limit" 1000000 (paretoWitnessLimit options)
+  nodes <- bounded "node limit" 1000000 (paretoNodeLimit options)
+  roots <- bounded "root limit" 1000000 (paretoRootLimit options)
+  precision <- bounded "cost bit limit" 65536 (paretoCostBitLimit options)
+  unless (toInteger archive * toInteger witnesses <= 1000000) $
+    Left (InvalidParetoOptions "archive/witness product exceeds 1000000")
+  bounds <- traverse (parseVectorWith dimensions precision) (paretoUpperBounds options)
+  pure ParsedParetoOptions
+    { parsedDimensions = dimensions
+    , parsedUpperBounds = bounds
+    , parsedExpansionLimit = paretoExpansionLimit options
+    , parsedArchiveLimit = archive
+    , parsedWitnessLimit = witnesses
+    , parsedNodeLimit = nodes
+    , parsedRootLimit = roots
+    , parsedCostBitLimit = precision
+    }
+ where
+  bounded label upper value
+    | value > 0 && value <= upper = Right value
+    | otherwise = Left $
+        InvalidParetoOptions (label ++ " must be between 1 and " ++ show upper)
 
 parseVector ::
   ParsedParetoOptions -> [Natural] -> Either ParetoError (V.Vector Natural)
