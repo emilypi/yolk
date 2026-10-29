@@ -85,6 +85,7 @@ module Yolk.Optics
   , _InvalidParetoOptions
   , _ObjectiveDimensionMismatch
   , _ParetoInputLimit
+  , _ParetoErrors
   , classIdRep
   , classIdIndex
   , snapshotRoots
@@ -97,7 +98,7 @@ import Data.Word (Word64)
 import Numeric.Natural (Natural)
 import Type.Reflection (TypeRep, Typeable)
 import Yolk.Extract.Dag qualified as D
-import Yolk.Extract.Pareto (parsedParetoOptions)
+import Yolk.Extract.Pareto (parsedParetoOptions, _ParetoErrors)
 import Yolk.Extract.Pareto qualified as P
 import Yolk.Internal.Graph qualified as G
 import Yolk.Internal.Types

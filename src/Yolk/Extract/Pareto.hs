@@ -19,7 +19,10 @@ module Yolk.Extract.Pareto
   , ParetoOptions (..)
   , defaultParetoOptions
   , ParetoError (..)
+  , ParetoErrors (..)
+  , _ParetoErrors
   , ParsedParetoOptions
+  , validateParetoOptions
   , parseParetoOptions
   , parsedParetoOptions
   , ParetoCoverage (..)
@@ -47,11 +50,15 @@ import Data.Functor.Const (Const (..))
 import Data.HKD (FFoldable (..), FFunctor (..), FTraversable (..))
 import Data.IntMap.Strict qualified as IM
 import Data.IntSet qualified as IS
+import Data.List.NonEmpty (NonEmpty (..))
+import Data.List.NonEmpty qualified as NE
+import Data.Validation (Validation (..), foldValidation)
 import Data.Vector qualified as V
 import Data.Word (Word64)
 import Numeric.Natural (Natural)
 import Yolk.Backend (Backend)
 import Yolk.Dag (Dag, dagFromSelection)
+import Yolk.Extract.Pareto.Error
 import Yolk.Internal.Graph
 import Yolk.Internal.Pareto qualified as Search
 import Yolk.Internal.Types
@@ -88,12 +95,6 @@ defaultParetoOptions dimensions =
     100000
     10000
     4096
-
-data ParetoError
-  = InvalidParetoOptions !String
-  | ObjectiveDimensionMismatch !Int !Int
-  | ParetoInputLimit !String
-  deriving (Eq, Show)
 
 data ParetoCoverage = Complete | Partial | Approximate deriving (Eq, Show)
 data ParetoFeasibility = FeasibleFound | NoFeasibleFoundYet | ProvenInfeasible
@@ -161,47 +162,69 @@ parsedParetoOptions = to $ \options ->
     , paretoCostBitLimit = parsedCostBitLimit options
     }
 
-parseParetoOptions :: ParetoOptions -> Either ParetoError ParsedParetoOptions
-parseParetoOptions options = do
-  bounded "dimensions" 64 (paretoDimensions options)
-  bounded "archive limit" 1000000 (paretoArchiveLimit options)
-  bounded "witness limit" 1000000 (paretoWitnessLimit options)
-  bounded "node limit" 1000000 (paretoNodeLimit options)
-  bounded "root limit" 1000000 (paretoRootLimit options)
-  bounded "cost bit limit" 65536 (paretoCostBitLimit options)
-  unless
-    ( toInteger (paretoArchiveLimit options) * toInteger (paretoWitnessLimit options)
-        <= 1000000
-    )
-    (Left (InvalidParetoOptions "archive/witness product exceeds 1000000"))
-  let parsed =
-        ParsedParetoOptions
-          (paretoDimensions options)
-          Nothing
-          (paretoExpansionLimit options)
-          (paretoArchiveLimit options)
-          (paretoWitnessLimit options)
-          (paretoNodeLimit options)
-          (paretoRootLimit options)
-          (paretoCostBitLimit options)
-  bounds <- traverse (parseVector parsed) (paretoUpperBounds options)
-  pure parsed {parsedUpperBounds = bounds}
+-- | Accumulate independent configuration errors in field order, followed by
+-- product and vector errors. Dependent checks run only when their own
+-- prerequisites are valid, even if another independent field has failed.
+validateParetoOptions :: ParetoOptions -> Validation ParetoErrors ParsedParetoOptions
+validateParetoOptions options =
+  build <$> dimensions <*> archive <*> witnesses <*> nodes <*> roots <*> precision
+    <* productCheck
+    <*> bounds
  where
-  bounded label upper value =
-    unless
-      (value > 0 && value <= upper)
-      (Left (InvalidParetoOptions (label ++ " must be between 1 and " ++ show upper)))
+  dimensions = bounded "dimensions" 64 (paretoDimensions options)
+  archive = bounded "archive limit" 1000000 (paretoArchiveLimit options)
+  witnesses = bounded "witness limit" 1000000 (paretoWitnessLimit options)
+  nodes = bounded "node limit" 1000000 (paretoNodeLimit options)
+  roots = bounded "root limit" 1000000 (paretoRootLimit options)
+  precision = bounded "cost bit limit" 65536 (paretoCostBitLimit options)
+  build dimensionCount archiveLimit witnessLimit nodeLimit rootLimit bitLimit upper =
+    ParsedParetoOptions
+      { parsedDimensions = dimensionCount
+      , parsedUpperBounds = upper
+      , parsedExpansionLimit = paretoExpansionLimit options
+      , parsedArchiveLimit = archiveLimit
+      , parsedWitnessLimit = witnessLimit
+      , parsedNodeLimit = nodeLimit
+      , parsedRootLimit = rootLimit
+      , parsedCostBitLimit = bitLimit
+      }
+  bounded label upper value
+    | value > 0 && value <= upper = Success value
+    | otherwise = invalid $
+        InvalidParetoOptions (label ++ " must be between 1 and " ++ show upper)
+  productCheck = case (archive, witnesses) of
+    (Success a, Success w)
+      | toInteger a * toInteger w > 1000000 ->
+          invalid (InvalidParetoOptions "archive/witness product exceeds 1000000")
+    _ -> Success ()
+  bounds = case (dimensions, precision) of
+    (Success d, Success p) ->
+      traverse (either invalid Success . parseVectorWith d p) (paretoUpperBounds options)
+    -- Failed prerequisites are already reported by their field validators.
+    -- Do not inspect a vector using unchecked dimensions or exponent bounds.
+    _ -> Success Nothing
+  invalid err = Failure (ParetoErrors (err :| []))
+
+-- | Compatibility parser retaining the first error. Use 'validateParetoOptions'
+-- when a caller can present all independent configuration failures together.
+parseParetoOptions :: ParetoOptions -> Either ParetoError ParsedParetoOptions
+parseParetoOptions =
+  foldValidation (Left . NE.head . getParetoErrors) Right . validateParetoOptions
 
 parseVector ::
   ParsedParetoOptions -> [Natural] -> Either ParetoError (V.Vector Natural)
-parseVector options raw = do
-  let dimension = parsedDimensions options
-      vector = take (dimension + 1) raw
+parseVector options =
+  parseVectorWith (parsedDimensions options) (parsedCostBitLimit options)
+
+-- Dimensions and precision must have passed their scalar checks first.
+parseVectorWith :: Int -> Int -> [Natural] -> Either ParetoError (V.Vector Natural)
+parseVectorWith dimension precision raw = do
+  let vector = take (dimension + 1) raw
   unless
     (length vector == dimension)
     (Left (ObjectiveDimensionMismatch dimension (length vector)))
   unless
-    (all (< (2 ^ parsedCostBitLimit options :: Natural)) vector)
+    (all (< (2 ^ precision :: Natural)) vector)
     (Left (ParetoInputLimit "objective or bound exceeds the input bit limit"))
   pure (V.fromList vector)
 
